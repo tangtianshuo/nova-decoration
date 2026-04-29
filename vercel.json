@@ -1,0 +1,9 @@
+{
+	"rewrites": [
+		{ "source": "/api/(.*)", "destination": "/api/$1" },
+		{ "source": "/s/:slug", "destination": "/index.html" },
+		{ "source": "/q/:code", "destination": "/index.html" },
+		{ "source": "/fallback", "destination": "/index.html" },
+		{ "source": "/((?!assets/).*)", "destination": "/index.html" }
+	]
+}

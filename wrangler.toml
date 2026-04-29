@@ -1,0 +1,31 @@
+name = "nova-decoration-api"
+main = "api/index.ts"
+compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nova-dev"
+database_id = "local-dev-id"
+preview_database_id = "DB"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "nova-media-dev"
+
+[vars]
+DEFAULT_FALLBACK_URL = "http://localhost:5173/fallback"
+APP_WEB_URL = "http://localhost:5173"
+QRCODE_BASE_URL = "http://localhost:8787"
+
+[triggers]
+crons = []
+
+[env.staging.vars]
+DEFAULT_FALLBACK_URL = "https://staging.yourdomain.com/fallback"
+APP_WEB_URL = "https://staging.yourdomain.com"
+QRCODE_BASE_URL = "https://q-staging.yourdomain.com"
+
+[env.production.vars]
+DEFAULT_FALLBACK_URL = "https://www.yourdomain.com/fallback"
+APP_WEB_URL = "https://www.yourdomain.com"
+QRCODE_BASE_URL = "https://q.yourdomain.com"
