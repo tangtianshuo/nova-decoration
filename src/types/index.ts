@@ -1,5 +1,6 @@
 export interface Company {
 	id: string
+	tenantId?: string
 	name: string
 	logoUrl: string
 	intro: string
@@ -13,14 +14,16 @@ export interface Company {
 
 export interface User {
 	id: string
-	companyId: string
+	tenantId?: string | null
+	companyId?: string | null
 	email: string
-	role: "admin" | "editor"
+	role: "super_admin" | "tenant_admin" | "tenant_editor" | "tenant_viewer"
 	status: "active" | "disabled"
 }
 
 export interface Asset {
 	id: string
+	tenantId?: string
 	companyId: string
 	sourceType: "upload" | "bilibili"
 	assetType: "image" | "video"
@@ -54,6 +57,7 @@ export interface PageBlock {
 
 export interface ShowcasePage {
 	id: string
+	tenantId?: string
 	companyId: string
 	slug: string
 	title: string
@@ -67,6 +71,7 @@ export interface ShowcasePage {
 
 export interface ShareLink {
 	id: string
+	tenantId?: string
 	companyId: string
 	pageId: string
 	code: string
@@ -99,7 +104,7 @@ export interface LoginRequest {
 export interface LoginResponse {
 	token: string
 	user: User
-	company: Company
+	company: Company | null
 }
 
 export interface UploadSignRequest {

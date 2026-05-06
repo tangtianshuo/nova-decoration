@@ -1,9 +1,9 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, Image, FileText, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Building2, Image, FileText, LogOut, Menu } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useState } from 'react';
 
-const navItems = [
+const defaultNavItems = [
   { path: '/dashboard', label: '概览', icon: LayoutDashboard },
   { path: '/company/profile', label: '公司资料', icon: Building2 },
   { path: '/assets', label: '素材管理', icon: Image },
@@ -11,9 +11,16 @@ const navItems = [
 ];
 
 export default function AdminLayout() {
-  const { company, logout } = useAuthStore();
+  const { company, user, logout } = useAuthStore();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isSuperAdmin = user?.role === 'super_admin';
+  const navItems = isSuperAdmin
+    ? [
+        { path: '/dashboard', label: '概览', icon: LayoutDashboard },
+        { path: '/platform/tenants', label: '租户管理', icon: Building2 },
+      ]
+    : defaultNavItems;
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -33,10 +40,10 @@ export default function AdminLayout() {
             <img src={company.logoUrl} alt="" className="w-8 h-8 rounded object-cover" />
           ) : (
             <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white text-sm font-bold">
-              {company?.name?.[0] || 'N'}
+              {(company?.name || user?.email || 'N')?.[0]}
             </div>
           )}
-          <span className="font-semibold text-gray-900 truncate">{company?.name || 'Nova 装饰'}</span>
+          <span className="font-semibold text-gray-900 truncate">{company?.name || (isSuperAdmin ? '平台超级管理员' : 'Nova 装饰')}</span>
         </div>
         <nav className="mt-4 px-3 space-y-1">
           {navItems.map((item) => {
@@ -79,7 +86,7 @@ export default function AdminLayout() {
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{company?.name}</span>
+            <span className="text-sm text-gray-500">{company?.name || user?.email}</span>
           </div>
         </header>
         <main className="flex-1 p-6 overflow-auto">

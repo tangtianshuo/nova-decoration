@@ -7,6 +7,7 @@ import pageRoutes from "./routes/pages"
 import shareLinkRoutes from "./routes/share-links"
 import publicRoutes from "./routes/public"
 import eventRoutes from "./routes/events"
+import platformRoutes from "./routes/platform"
 import { redirectByCode } from "./routes/short-redirect"
 import { fail, ok } from "./lib/response"
 
@@ -14,6 +15,7 @@ type Bindings = {
 	DB: D1Database
 	BUCKET: R2Bucket
 	JWT_SECRET: string
+	PASSWORD_PEPPER?: string
 	DEFAULT_FALLBACK_URL: string
 	APP_WEB_URL: string
 	QRCODE_BASE_URL: string
@@ -46,6 +48,7 @@ app.route("/api/pages", pageRoutes)
 app.route("/api/share-links", shareLinkRoutes)
 app.route("/api/public", publicRoutes)
 app.route("/api/events", eventRoutes)
+app.route("/api/platform", platformRoutes)
 
 app.get("/q/:code", redirectByCode)
 

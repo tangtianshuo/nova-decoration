@@ -10,7 +10,7 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 function generateId(): string {
-	return `pg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+	return crypto.randomUUID()
 }
 
 function generateSlug(title: string): string {
@@ -27,7 +27,8 @@ function mapPageBlockRow(block: any) {
 	return {
 		id: block.id,
 		pageId: block.page_id,
-		companyId: block.company_id,
+		tenantId: block.tenant_id,
+		companyId: block.tenant_id,
 		blockType: block.block_type,
 		refAssetId: block.ref_asset_id,
 		contentJson: block.content_json,
@@ -40,7 +41,8 @@ function mapPageBlockRow(block: any) {
 function mapPageRow(page: any, blocks?: any[]) {
 	return {
 		id: page.id,
-		companyId: page.company_id,
+		tenantId: page.tenant_id,
+		companyId: page.tenant_id,
 		slug: page.slug,
 		title: page.title,
 		summary: page.summary,
@@ -55,13 +57,14 @@ function mapPageRow(page: any, blocks?: any[]) {
 app.get("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const db = c.env.DB
 	const pages = await db
 		.prepare(
-			"SELECT id, company_id, slug, title, summary, publish_status, published_at, created_at, updated_at FROM pages WHERE company_id = ? ORDER BY updated_at DESC",
+			"SELECT id, tenant_id, slug, title, summary, publish_status, published_at, created_at, updated_at FROM pages WHERE tenant_id = ? ORDER BY updated_at DESC",
 		)
-		.bind(user.companyId)
+		.bind(user.tenantId)
 		.all()
 
 	return ok(
@@ -73,6 +76,7 @@ app.get("/", async (c) => {
 app.post("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const { title, summary, publishStatus, blocks } = await c.req.json()
 	if (!title) return fail(c, 4001, "请输入页面标题", 400)
@@ -86,11 +90,11 @@ app.post("/", async (c) => {
 
 	await db
 		.prepare(
-			"INSERT INTO pages (id, company_id, slug, title, summary, publish_status, published_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO pages (id, tenant_id, slug, title, summary, publish_status, published_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		)
 		.bind(
 			id,
-			user.companyId,
+			user.tenantId,
 			slug,
 			title,
 			summary || "",
@@ -104,15 +108,15 @@ app.post("/", async (c) => {
 	if (blocks && Array.isArray(blocks)) {
 		for (let i = 0; i < blocks.length; i++) {
 			const block = blocks[i]
-			const blockId = `blk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+			const blockId = crypto.randomUUID()
 			await db
 				.prepare(
-					"INSERT INTO page_blocks (id, page_id, company_id, block_type, ref_asset_id, content_json, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+					"INSERT INTO page_blocks (id, page_id, tenant_id, block_type, ref_asset_id, content_json, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				)
 				.bind(
 					blockId,
 					id,
-					user.companyId,
+					user.tenantId,
 					block.blockType,
 					block.refAssetId || "",
 					JSON.stringify(block.contentJson || block.content_json || ""),
@@ -139,13 +143,14 @@ app.post("/", async (c) => {
 app.get("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const page = await db
-		.prepare("SELECT * FROM pages WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM pages WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!page) return fail(c, 4004, "页面不存在", 404)
 
@@ -160,13 +165,14 @@ app.get("/:id", async (c) => {
 app.put("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const existing = await db
-		.prepare("SELECT * FROM pages WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM pages WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!existing) return fail(c, 4004, "页面不存在", 404)
 
@@ -184,15 +190,15 @@ app.put("/:id", async (c) => {
 		await db.prepare("DELETE FROM page_blocks WHERE page_id = ?").bind(id).run()
 		for (let i = 0; i < body.blocks.length; i++) {
 			const block = body.blocks[i]
-			const blockId = `blk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+			const blockId = crypto.randomUUID()
 			await db
 				.prepare(
-					"INSERT INTO page_blocks (id, page_id, company_id, block_type, ref_asset_id, content_json, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+					"INSERT INTO page_blocks (id, page_id, tenant_id, block_type, ref_asset_id, content_json, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				)
 				.bind(
 					blockId,
 					id,
-					user.companyId,
+					user.tenantId,
 					block.blockType,
 					block.refAssetId || "",
 					JSON.stringify(block.contentJson || block.content_json || ""),
@@ -219,13 +225,14 @@ app.put("/:id", async (c) => {
 app.post("/:id/publish", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const existing = await db
-		.prepare("SELECT * FROM pages WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM pages WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!existing) return fail(c, 4004, "页面不存在", 404)
 
@@ -247,13 +254,14 @@ app.post("/:id/publish", async (c) => {
 app.post("/:id/offline", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const existing = await db
-		.prepare("SELECT * FROM pages WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM pages WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!existing) return fail(c, 4004, "页面不存在", 404)
 
@@ -273,13 +281,14 @@ app.post("/:id/offline", async (c) => {
 app.delete("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const existing = await db
-		.prepare("SELECT * FROM pages WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM pages WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!existing) return fail(c, 4004, "页面不存在", 404)
 

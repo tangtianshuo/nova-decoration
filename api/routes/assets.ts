@@ -12,7 +12,7 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 function generateId(): string {
-	return `as_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+	return crypto.randomUUID()
 }
 
 const ALLOWED_IMAGE_TYPES = [
@@ -28,7 +28,8 @@ const MAX_VIDEO_SIZE = 500 * 1024 * 1024
 function mapAssetRow(asset: any) {
 	return {
 		id: asset.id,
-		companyId: asset.company_id,
+		tenantId: asset.tenant_id,
+		companyId: asset.tenant_id,
 		sourceType: asset.source_type,
 		assetType: asset.asset_type,
 		url: asset.url,
@@ -46,6 +47,7 @@ function mapAssetRow(asset: any) {
 app.post("/upload/sign", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const { assetType, fileName, contentType, sizeBytes } = await c.req.json()
 	if (!assetType || !fileName) {
@@ -66,7 +68,7 @@ app.post("/upload/sign", async (c) => {
 	const ext =
 		fileName.split(".").pop() || (assetType === "image" ? "jpg" : "mp4")
 	const datePath = new Date().toISOString().slice(0, 10).replace(/-/g, "/")
-	const objectKey = `company/${user.companyId}/${datePath}/${generateId()}.${ext}`
+	const objectKey = `tenant/${user.tenantId}/${datePath}/${generateId()}.${ext}`
 
 	return ok(c, {
 		objectKey,
@@ -79,9 +81,10 @@ app.post("/upload/sign", async (c) => {
 app.put("/upload/direct/:key{.+}", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const objectKey = c.req.param("key")
-	if (!objectKey.startsWith(`company/${user.companyId}/`)) {
+	if (!objectKey.startsWith(`tenant/${user.tenantId}/`)) {
 		return fail(c, 4003, "无权限", 403)
 	}
 
@@ -90,7 +93,7 @@ app.put("/upload/direct/:key{.+}", async (c) => {
 
 	await c.env.BUCKET.put(objectKey, body, {
 		httpMetadata: { contentType },
-		customMetadata: { companyId: user.companyId, uploadedBy: user.userId },
+		customMetadata: { tenantId: user.tenantId, uploadedBy: user.userId },
 	})
 
 	return ok(c, { objectKey })
@@ -99,6 +102,7 @@ app.put("/upload/direct/:key{.+}", async (c) => {
 app.post("/complete", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const { objectKey, assetType, title } = await c.req.json()
 	if (!objectKey || !assetType) {
@@ -116,9 +120,9 @@ app.post("/complete", async (c) => {
 
 	const existed = await db
 		.prepare(
-			"SELECT * FROM assets WHERE company_id = ? AND source_type = ? AND url = ? LIMIT 1",
+			"SELECT * FROM assets WHERE tenant_id = ? AND source_type = ? AND url = ? LIMIT 1",
 		)
-		.bind(user.companyId, "upload", url)
+		.bind(user.tenantId, "upload", url)
 		.first()
 	if (existed) {
 		return ok(c, mapAssetRow(existed))
@@ -130,11 +134,11 @@ app.post("/complete", async (c) => {
 
 	await db
 		.prepare(
-			"INSERT INTO assets (id, company_id, source_type, asset_type, url, cover_url, bilibili_bvid, title, size_bytes, duration_sec, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO assets (id, tenant_id, source_type, asset_type, url, cover_url, bilibili_bvid, title, size_bytes, duration_sec, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		)
 		.bind(
 			id,
-			user.companyId,
+			user.tenantId,
 			"upload",
 			assetType,
 			url,
@@ -160,6 +164,7 @@ app.post("/complete", async (c) => {
 app.post("/bilibili", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const { url, title } = await c.req.json()
 	if (!url) return fail(c, 4001, "请输入Bilibili链接", 400)
@@ -174,11 +179,11 @@ app.post("/bilibili", async (c) => {
 
 	await db
 		.prepare(
-			"INSERT INTO assets (id, company_id, source_type, asset_type, url, cover_url, bilibili_bvid, title, size_bytes, duration_sec, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO assets (id, tenant_id, source_type, asset_type, url, cover_url, bilibili_bvid, title, size_bytes, duration_sec, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		)
 		.bind(
 			id,
-			user.companyId,
+			user.tenantId,
 			"bilibili",
 			"video",
 			url,
@@ -204,13 +209,14 @@ app.post("/bilibili", async (c) => {
 app.get("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const db = c.env.DB
 	const assets = await db
 		.prepare(
-			"SELECT * FROM assets WHERE company_id = ? ORDER BY created_at DESC",
+			"SELECT * FROM assets WHERE tenant_id = ? ORDER BY created_at DESC",
 		)
-		.bind(user.companyId)
+		.bind(user.tenantId)
 		.all()
 
 	return ok(c, (assets.results || []).map(mapAssetRow))
@@ -219,13 +225,14 @@ app.get("/", async (c) => {
 app.delete("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const asset = await db
-		.prepare("SELECT * FROM assets WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM assets WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!asset) return fail(c, 4004, "素材不存在", 404)
 
@@ -235,8 +242,8 @@ app.delete("/:id", async (c) => {
 	}
 
 	await db
-		.prepare("DELETE FROM assets WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("DELETE FROM assets WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.run()
 
 	return ok(c, null)

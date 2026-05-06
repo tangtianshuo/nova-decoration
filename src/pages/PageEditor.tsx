@@ -30,7 +30,7 @@ export default function PageEditor() {
 
   const addBlock = (type: BlockType) => {
     const block: PageBlock = {
-      id: `blk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: crypto.randomUUID(),
       pageId: '',
       blockType: type,
       refAssetId: '',

@@ -10,6 +10,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 function mapCompanyRow(company: any) {
 	return {
 		id: company.id,
+		tenantId: company.tenant_id,
 		name: company.name,
 		logoUrl: company.logo_url,
 		intro: company.intro,
@@ -36,7 +37,8 @@ function mapPageBlockRow(block: any) {
 function mapPageRow(page: any, blocks: any[]) {
 	return {
 		id: page.id,
-		companyId: page.company_id,
+		tenantId: page.tenant_id,
+		companyId: page.tenant_id,
 		slug: page.slug,
 		title: page.title,
 		summary: page.summary,
@@ -51,7 +53,8 @@ function mapPageRow(page: any, blocks: any[]) {
 function mapAssetRow(asset: any) {
 	return {
 		id: asset.id,
-		companyId: asset.company_id,
+		tenantId: asset.tenant_id,
+		companyId: asset.tenant_id,
 		sourceType: asset.source_type,
 		assetType: asset.asset_type,
 		url: asset.url,
@@ -80,9 +83,9 @@ app.get("/pages/:slug", async (c) => {
 
 	const company = await db
 		.prepare(
-			"SELECT id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE id = ?",
+			"SELECT id, tenant_id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE tenant_id = ?",
 		)
-		.bind(page.company_id)
+		.bind(page.tenant_id)
 		.first()
 	if (!company) return fail(c, 4004, "公司信息不存在", 404)
 
@@ -92,8 +95,8 @@ app.get("/pages/:slug", async (c) => {
 		.all()
 
 	const assets = await db
-		.prepare("SELECT * FROM assets WHERE company_id = ? AND status = ?")
-		.bind(page.company_id, "ready")
+		.prepare("SELECT * FROM assets WHERE tenant_id = ? AND status = ?")
+		.bind(page.tenant_id, "ready")
 		.all()
 
 	return ok(c, {

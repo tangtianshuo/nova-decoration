@@ -13,12 +13,12 @@ app.post("/", async (c) => {
 	if (!eventType) return fail(c, 4001, "缺少事件类型", 400)
 
 	const db = c.env.DB
-	const id = `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+	const id = crypto.randomUUID()
 	const now = new Date().toISOString()
 
 	await db
 		.prepare(
-			"INSERT INTO events (id, company_id, page_id, share_link_id, event_type, event_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO events (id, tenant_id, page_id, share_link_id, event_type, event_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 		)
 		.bind(
 			id,
@@ -37,6 +37,7 @@ app.post("/", async (c) => {
 app.get("/summary", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const daysRaw = Number(c.req.query("days") || 7)
 	const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 30) : 7
@@ -45,23 +46,23 @@ app.get("/summary", async (c) => {
 	const db = c.env.DB
 	const total = await db
 		.prepare(
-			"SELECT COUNT(1) as count FROM events WHERE company_id = ? AND created_at >= ?",
+			"SELECT COUNT(1) as count FROM events WHERE tenant_id = ? AND created_at >= ?",
 		)
-		.bind(user.companyId, since)
+		.bind(user.tenantId, since)
 		.first()
 
 	const byType = await db
 		.prepare(
-			"SELECT event_type, COUNT(1) as count FROM events WHERE company_id = ? AND created_at >= ? GROUP BY event_type ORDER BY count DESC",
+			"SELECT event_type, COUNT(1) as count FROM events WHERE tenant_id = ? AND created_at >= ? GROUP BY event_type ORDER BY count DESC",
 		)
-		.bind(user.companyId, since)
+		.bind(user.tenantId, since)
 		.all()
 
 	const errorReasons = await db
 		.prepare(
-			"SELECT json_extract(event_data, '$.reason') as reason, COUNT(1) as count FROM events WHERE company_id = ? AND event_type = 'error' AND created_at >= ? GROUP BY reason ORDER BY count DESC",
+			"SELECT json_extract(event_data, '$.reason') as reason, COUNT(1) as count FROM events WHERE tenant_id = ? AND event_type = 'error' AND created_at >= ? GROUP BY reason ORDER BY count DESC",
 		)
-		.bind(user.companyId, since)
+		.bind(user.tenantId, since)
 		.all()
 
 	return ok(c, {

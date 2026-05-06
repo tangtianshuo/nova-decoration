@@ -24,20 +24,20 @@ function buildFallbackUrl(
 async function logEvent(
 	c: Context<{ Bindings: Bindings }>,
 	params: {
-		companyId?: string | null
+		tenantId?: string | null
 		pageId?: string | null
 		shareLinkId?: string | null
 		eventType: string
 		eventData?: Record<string, unknown>
 	},
 ) {
-	const id = `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+	const id = crypto.randomUUID()
 	await c.env.DB.prepare(
-		"INSERT INTO events (id, company_id, page_id, share_link_id, event_type, event_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO events (id, tenant_id, page_id, share_link_id, event_type, event_data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 	)
 		.bind(
 			id,
-			params.companyId ?? null,
+			params.tenantId ?? null,
 			params.pageId ?? null,
 			params.shareLinkId ?? null,
 			params.eventType,
@@ -69,7 +69,7 @@ export async function redirectByCode(c: Context<{ Bindings: Bindings }>) {
 
 	if (link.status !== "active") {
 		await logEvent(c, {
-			companyId: String(link.company_id),
+			tenantId: String(link.tenant_id),
 			pageId: String(link.page_id),
 			shareLinkId: String(link.id),
 			eventType: "error",
@@ -91,7 +91,7 @@ export async function redirectByCode(c: Context<{ Bindings: Bindings }>) {
 			.bind("expired", new Date().toISOString(), link.id)
 			.run()
 		await logEvent(c, {
-			companyId: String(link.company_id),
+			tenantId: String(link.tenant_id),
 			pageId: String(link.page_id),
 			shareLinkId: String(link.id),
 			eventType: "error",
@@ -114,7 +114,7 @@ export async function redirectByCode(c: Context<{ Bindings: Bindings }>) {
 
 	if (!page || page.publish_status !== "published") {
 		await logEvent(c, {
-			companyId: String(link.company_id),
+			tenantId: String(link.tenant_id),
 			pageId: String(link.page_id),
 			shareLinkId: String(link.id),
 			eventType: "error",
@@ -137,7 +137,7 @@ export async function redirectByCode(c: Context<{ Bindings: Bindings }>) {
 		.bind(new Date().toISOString(), link.id)
 		.run()
 	await logEvent(c, {
-		companyId: String(link.company_id),
+		tenantId: String(link.tenant_id),
 		pageId: String(link.page_id),
 		shareLinkId: String(link.id),
 		eventType: "scan",

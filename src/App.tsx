@@ -13,6 +13,7 @@ import PageEdit from '@/pages/PageEdit';
 import PageShare from '@/pages/PageShare';
 import Showcase from '@/pages/Showcase';
 import Fallback from '@/pages/Fallback';
+import PlatformTenants from '@/pages/PlatformTenants';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="pages/new" element={<PageEditor />} />
           <Route path="pages/:id/edit" element={<PageEdit />} />
           <Route path="pages/:id/share" element={<PageShare />} />
+          <Route path="platform/tenants" element={<PlatformTenants />} />
         </Route>
 
         <Route path="/s/:slug" element={<Showcase />} />

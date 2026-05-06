@@ -11,8 +11,9 @@ const stats = [
 ];
 
 export default function Dashboard() {
-  const { company } = useAuthStore();
+  const { company, user } = useAuthStore();
   const { pages, assets, shareLinks } = useAppStore();
+  const isSuperAdmin = user?.role === 'super_admin';
 
   const counts = {
     pages: pages.length,
@@ -24,8 +25,10 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">欢迎回来，{company?.name || '管理员'}</h1>
-        <p className="text-gray-500 mt-1">管理您的展示页、素材和分享二维码</p>
+        <h1 className="text-2xl font-bold text-gray-900">欢迎回来，{company?.name || user?.email || '管理员'}</h1>
+        <p className="text-gray-500 mt-1">
+          {isSuperAdmin ? '平台管理视图：可管理租户与初始管理员账号' : '管理您的展示页、素材和分享二维码'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -52,32 +55,34 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">快捷操作</h2>
           <div className="space-y-3">
             <Link
-              to="/pages/new"
+              to={isSuperAdmin ? '/platform/tenants' : '/pages/new'}
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
             >
               <FileText className="w-5 h-5 text-indigo-500" />
-              创建新展示页
+              {isSuperAdmin ? '租户管理' : '创建新展示页'}
             </Link>
             <Link
-              to="/assets/upload"
+              to={isSuperAdmin ? '/platform/tenants' : '/assets/upload'}
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
             >
               <Image className="w-5 h-5 text-green-500" />
-              上传素材
+              {isSuperAdmin ? '查看租户列表' : '上传素材'}
             </Link>
             <Link
-              to="/pages"
+              to={isSuperAdmin ? '/platform/tenants' : '/pages'}
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
             >
               <QrCode className="w-5 h-5 text-purple-500" />
-              管理分享链接
+              {isSuperAdmin ? '租户详情查询' : '管理分享链接'}
             </Link>
           </div>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">最近发布的展示页</h2>
-          {pages.filter((p) => p.publishStatus === 'published').length === 0 ? (
+          {isSuperAdmin ? (
+            <p className="text-sm text-gray-500 py-4 text-center">超级管理员不展示租户业务数据，请使用左侧菜单进入租户管理。</p>
+          ) : pages.filter((p) => p.publishStatus === 'published').length === 0 ? (
             <p className="text-sm text-gray-400 py-4 text-center">暂无已发布的展示页</p>
           ) : (
             <div className="space-y-3">

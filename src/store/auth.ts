@@ -6,9 +6,9 @@ interface AuthState {
 	user: User | null
 	company: Company | null
 	isAuthenticated: boolean
-	login: (token: string, user: User, company: Company) => void
+	login: (token: string, user: User, company: Company | null) => void
 	logout: () => void
-	updateCompany: (company: Company) => void
+	updateCompany: (company: Company | null) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({

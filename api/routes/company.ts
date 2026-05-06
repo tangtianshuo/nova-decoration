@@ -12,19 +12,21 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get("/me", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const db = c.env.DB
 	const company = await db
 		.prepare(
-			"SELECT id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE id = ?",
+			"SELECT id, tenant_id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE tenant_id = ?",
 		)
-		.bind(user.companyId)
+		.bind(user.tenantId)
 		.first()
 
 	if (!company) return fail(c, 4004, "公司不存在", 404)
 
 	return ok(c, {
 		id: company.id,
+		tenantId: company.tenant_id,
 		name: company.name,
 		logoUrl: company.logo_url,
 		intro: company.intro,
@@ -38,6 +40,7 @@ app.get("/me", async (c) => {
 app.put("/me", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const body = await c.req.json()
 	const { name, intro, contactPhone, contactWechat, contactAddress } = body
@@ -46,7 +49,7 @@ app.put("/me", async (c) => {
 	const db = c.env.DB
 	await db
 		.prepare(
-			"UPDATE companies SET name = COALESCE(?, name), intro = COALESCE(?, intro), contact_phone = COALESCE(?, contact_phone), contact_wechat = COALESCE(?, contact_wechat), contact_address = COALESCE(?, contact_address), updated_at = ? WHERE id = ?",
+			"UPDATE companies SET name = COALESCE(?, name), intro = COALESCE(?, intro), contact_phone = COALESCE(?, contact_phone), contact_wechat = COALESCE(?, contact_wechat), contact_address = COALESCE(?, contact_address), updated_at = ? WHERE tenant_id = ?",
 		)
 		.bind(
 			name || null,
@@ -55,19 +58,20 @@ app.put("/me", async (c) => {
 			contactWechat || null,
 			contactAddress || null,
 			now,
-			user.companyId,
+			user.tenantId,
 		)
 		.run()
 
 	const company = await db
 		.prepare(
-			"SELECT id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE id = ?",
+			"SELECT id, tenant_id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE tenant_id = ?",
 		)
-		.bind(user.companyId)
+		.bind(user.tenantId)
 		.first()
 
 	return ok(c, {
 		id: company.id,
+		tenantId: company.tenant_id,
 		name: company.name,
 		logoUrl: company.logo_url,
 		intro: company.intro,

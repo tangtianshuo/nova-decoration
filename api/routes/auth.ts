@@ -5,12 +5,13 @@ import { fail, ok } from "../lib/response"
 type Bindings = {
 	DB: D1Database
 	JWT_SECRET: string
+	PASSWORD_PEPPER?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
 
 function generateId(): string {
-	return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+	return crypto.randomUUID()
 }
 
 app.post("/login", async (c) => {
@@ -22,7 +23,7 @@ app.post("/login", async (c) => {
 	const db = c.env.DB
 	const user = await db
 		.prepare(
-			"SELECT id, company_id, email, role, status, password_hash FROM users WHERE email = ? AND status = ?",
+			"SELECT id, tenant_id, email, role, status, password_hash FROM users WHERE email = ? AND status = ?",
 		)
 		.bind(email, "active")
 		.first()
@@ -31,28 +32,31 @@ app.post("/login", async (c) => {
 		return fail(c, 4003, "邮箱或密码错误", 401)
 	}
 
-	const hash = await hashPassword(password, c.env.JWT_SECRET)
+	const hash = await hashPassword(password, c.env.PASSWORD_PEPPER ?? "")
 	if (hash !== user.password_hash) {
 		return fail(c, 4003, "邮箱或密码错误", 401)
 	}
 
-	const company = await db
-		.prepare(
-			"SELECT id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE id = ?",
-		)
-		.bind(user.company_id)
-		.first()
-
 	const token = await signJWT(
-		{ userId: user.id, companyId: user.company_id, role: user.role },
+		{ userId: user.id, tenantId: user.tenant_id || undefined, role: user.role },
 		c.env.JWT_SECRET,
 	)
+
+	const company =
+		user.tenant_id &&
+		(await db
+			.prepare(
+				"SELECT id, tenant_id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE tenant_id = ?",
+			)
+			.bind(user.tenant_id)
+			.first())
 
 	return ok(c, {
 		token,
 		user: {
 			id: user.id,
-			companyId: user.company_id,
+			tenantId: user.tenant_id || null,
+			companyId: user.tenant_id || null,
 			email: user.email,
 			role: user.role,
 			status: user.status,
@@ -60,6 +64,7 @@ app.post("/login", async (c) => {
 		company: company
 			? {
 					id: company.id,
+					tenantId: company.tenant_id,
 					name: company.name,
 					logoUrl: company.logo_url,
 					intro: company.intro,
@@ -87,34 +92,60 @@ app.post("/register", async (c) => {
 		return fail(c, 4090, "该邮箱已注册", 409)
 	}
 
-	const companyId = `cp_${generateId()}`
-	const userId = `u_${generateId()}`
+	const tenantId = generateId()
+	const companyId = generateId()
+	const userId = generateId()
 	const now = new Date().toISOString()
-	const hash = await hashPassword(password, c.env.JWT_SECRET)
+	const hash = await hashPassword(password, c.env.PASSWORD_PEPPER ?? "")
 
 	await db.batch([
 		db
 			.prepare(
-				"INSERT INTO companies (id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"INSERT INTO tenants (id, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 			)
-			.bind(companyId, companyName, "", "", "", "", "", "active", now, now),
+			.bind(tenantId, companyName, "active", now, now),
 		db
 			.prepare(
-				"INSERT INTO users (id, company_id, email, password_hash, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+				"INSERT INTO companies (id, tenant_id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			)
-			.bind(userId, companyId, email, hash, "admin", "active", now, now),
+			.bind(
+				companyId,
+				tenantId,
+				companyName,
+				"",
+				"",
+				"",
+				"",
+				"",
+				"active",
+				now,
+				now,
+			),
+		db
+			.prepare(
+				"INSERT INTO users (id, tenant_id, email, password_hash, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			)
+			.bind(userId, tenantId, email, hash, "tenant_admin", "active", now, now),
 	])
 
 	const token = await signJWT(
-		{ userId, companyId, role: "admin" },
+		{ userId, tenantId, role: "tenant_admin" },
 		c.env.JWT_SECRET,
 	)
 
 	return ok(c, {
 		token,
-		user: { id: userId, companyId, email, role: "admin", status: "active" },
+		user: {
+			id: userId,
+			tenantId,
+			companyId: tenantId,
+			email,
+			role: "tenant_admin",
+			status: "active",
+		},
 		company: {
 			id: companyId,
+			tenantId,
 			name: companyName,
 			logoUrl: "",
 			intro: "",

@@ -26,7 +26,8 @@ function mapShareLinkRow(link: any, qrcodeBaseUrl?: string) {
 	const shortUrl = qrcodeBaseUrl ? `${qrcodeBaseUrl}/q/${link.code}` : undefined
 	return {
 		id: link.id,
-		companyId: link.company_id,
+		tenantId: link.tenant_id,
+		companyId: link.tenant_id,
 		pageId: link.page_id,
 		code: link.code,
 		status: link.status,
@@ -42,6 +43,7 @@ function mapShareLinkRow(link: any, qrcodeBaseUrl?: string) {
 app.post("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const { pageId, expireAt, fallbackUrl } = await c.req.json()
 	if (!pageId) return fail(c, 4001, "请指定页面", 400)
@@ -49,20 +51,20 @@ app.post("/", async (c) => {
 	const db = c.env.DB
 
 	const page = await db
-		.prepare("SELECT * FROM pages WHERE id = ? AND company_id = ?")
-		.bind(pageId, user.companyId)
+		.prepare("SELECT * FROM pages WHERE id = ? AND tenant_id = ?")
+		.bind(pageId, user.tenantId)
 		.first()
 	if (!page) return fail(c, 4004, "页面不存在", 404)
 
 	const existing = await db
 		.prepare(
-			"SELECT * FROM share_links WHERE page_id = ? AND company_id = ? AND status = ?",
+			"SELECT * FROM share_links WHERE page_id = ? AND tenant_id = ? AND status = ?",
 		)
-		.bind(pageId, user.companyId, "active")
+		.bind(pageId, user.tenantId, "active")
 		.first()
 	if (existing) return ok(c, mapShareLinkRow(existing, c.env.QRCODE_BASE_URL))
 
-	const id = `sl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+	const id = crypto.randomUUID()
 	const now = new Date().toISOString()
 	let created = false
 	let createdCode = ""
@@ -71,11 +73,11 @@ app.post("/", async (c) => {
 		try {
 			await db
 				.prepare(
-					"INSERT INTO share_links (id, company_id, page_id, code, status, expire_at, fallback_url, scan_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+					"INSERT INTO share_links (id, tenant_id, page_id, code, status, expire_at, fallback_url, scan_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				)
 				.bind(
 					id,
-					user.companyId,
+					user.tenantId,
 					pageId,
 					code,
 					"active",
@@ -109,13 +111,14 @@ app.post("/", async (c) => {
 app.get("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const db = c.env.DB
 	const links = await db
 		.prepare(
-			"SELECT * FROM share_links WHERE company_id = ? ORDER BY created_at DESC",
+			"SELECT * FROM share_links WHERE tenant_id = ? ORDER BY created_at DESC",
 		)
-		.bind(user.companyId)
+		.bind(user.tenantId)
 		.all()
 
 	return ok(
@@ -129,13 +132,14 @@ app.get("/", async (c) => {
 app.get("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
 
 	const link = await db
-		.prepare("SELECT * FROM share_links WHERE id = ? AND company_id = ?")
-		.bind(id, user.companyId)
+		.prepare("SELECT * FROM share_links WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
 		.first()
 	if (!link) return fail(c, 4004, "链接不存在", 404)
 
@@ -145,6 +149,7 @@ app.get("/:id", async (c) => {
 app.put("/:id/disable", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -152,9 +157,9 @@ app.put("/:id/disable", async (c) => {
 
 	await db
 		.prepare(
-			"UPDATE share_links SET status = ?, updated_at = ? WHERE id = ? AND company_id = ?",
+			"UPDATE share_links SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
 		)
-		.bind("disabled", now, id, user.companyId)
+		.bind("disabled", now, id, user.tenantId)
 		.run()
 
 	const link = await db
@@ -167,6 +172,7 @@ app.put("/:id/disable", async (c) => {
 app.put("/:id/enable", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -174,9 +180,9 @@ app.put("/:id/enable", async (c) => {
 
 	await db
 		.prepare(
-			"UPDATE share_links SET status = ?, updated_at = ? WHERE id = ? AND company_id = ?",
+			"UPDATE share_links SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
 		)
-		.bind("active", now, id, user.companyId)
+		.bind("active", now, id, user.tenantId)
 		.run()
 
 	const link = await db

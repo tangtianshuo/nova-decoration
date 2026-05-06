@@ -15,24 +15,24 @@ describe("auth lib", () => {
 		const secret = "test-secret"
 		const token = await signJWT(
 			{
-				userId: "u_1",
-				companyId: "cp_1",
+				userId: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+				tenantId: "0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b",
 				role: "admin",
 			},
 			secret,
 		)
 		const payload = await verifyJWT(token, secret)
 		expect(payload).toBeTruthy()
-		expect(payload?.userId).toBe("u_1")
-		expect(payload?.companyId).toBe("cp_1")
+		expect(payload?.userId).toBe("2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e")
+		expect(payload?.tenantId).toBe("0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b")
 		expect(payload?.role).toBe("admin")
 	})
 
 	it("verifyJWT should fail with wrong secret", async () => {
 		const token = await signJWT(
 			{
-				userId: "u_1",
-				companyId: "cp_1",
+				userId: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+				tenantId: "0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b",
 				role: "admin",
 			},
 			"secret-a",

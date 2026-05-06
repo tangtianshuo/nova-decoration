@@ -1,7 +1,8 @@
 export type AuthUser = {
 	userId: string
-	companyId: string
 	role: string
+	tenantId?: string
+	companyId?: string
 	iat?: number
 	exp?: number
 }
@@ -24,9 +25,9 @@ function fromBase64Url(input: string): string {
 
 export async function hashPassword(
 	password: string,
-	secret: string,
+	pepper = "",
 ): Promise<string> {
-	const data = textEncoder.encode(password + secret)
+	const data = textEncoder.encode(password + pepper)
 	const hash = await crypto.subtle.digest("SHA-256", data)
 	return Array.from(new Uint8Array(hash))
 		.map((b) => b.toString(16).padStart(2, "0"))
@@ -89,9 +90,21 @@ export async function verifyJWT(
 		if (!isValid) return null
 
 		const payload = JSON.parse(fromBase64Url(encodedPayload)) as AuthUser
-		if (!payload.userId || !payload.companyId || !payload.role) return null
+		if (!payload.userId || !payload.role) return null
+		if (
+			payload.role !== "super_admin" &&
+			!payload.tenantId &&
+			!payload.companyId
+		) {
+			return null
+		}
 		if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null
-		return payload
+		const normalizedTenantId = payload.tenantId || payload.companyId
+		return {
+			...payload,
+			tenantId: normalizedTenantId,
+			companyId: normalizedTenantId,
+		}
 	} catch {
 		return null
 	}
