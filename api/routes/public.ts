@@ -7,6 +7,27 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+function normalizeContentJson(raw: unknown): string {
+	if (raw === null || raw === undefined) return ""
+
+	let current: unknown = raw
+	for (let i = 0; i < 2; i++) {
+		if (typeof current !== "string") break
+		try {
+			current = JSON.parse(current)
+		} catch {
+			break
+		}
+	}
+
+	if (typeof current === "string") return current
+	try {
+		return JSON.stringify(current)
+	} catch {
+		return ""
+	}
+}
+
 function mapCompanyRow(company: any) {
 	return {
 		id: company.id,
@@ -29,7 +50,7 @@ function mapPageBlockRow(block: any) {
 		pageId: block.page_id,
 		blockType: block.block_type,
 		refAssetId: block.ref_asset_id,
-		contentJson: block.content_json,
+		contentJson: normalizeContentJson(block.content_json),
 		sortOrder: block.sort_order,
 	}
 }
@@ -69,15 +90,15 @@ function mapAssetRow(asset: any) {
 	}
 }
 
-app.get("/pages/:slug", async (c) => {
-	const slug = c.req.param("slug")
-	if (!slug) return fail(c, 4001, "参数错误", 400)
+app.get("/pages-by-id/:id", async (c) => {
+	const id = c.req.param("id")
+	if (!id) return fail(c, 4001, "参数错误", 400)
 
 	const db = c.env.DB
 
 	const page = await db
-		.prepare("SELECT * FROM pages WHERE slug = ? AND publish_status = ?")
-		.bind(slug, "published")
+		.prepare("SELECT * FROM pages WHERE id = ? AND publish_status = ?")
+		.bind(id, "published")
 		.first()
 	if (!page) return fail(c, 4004, "页面不存在或未发布", 404)
 

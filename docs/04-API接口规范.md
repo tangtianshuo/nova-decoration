@@ -150,7 +150,7 @@
 
 ### 6.1 获取展示页数据（公开）
 
-- `GET /api/public/pages/:slug`
+- `GET /api/public/pages-by-id/:id`
 - 响应包含：
   - 公司信息
   - 展示模块（图文/视频/B 站链接）

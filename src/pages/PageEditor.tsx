@@ -19,14 +19,47 @@ const blockTemplates: { type: BlockType; label: string; desc: string }[] = [
   { type: 'text', label: '自定义文本', desc: '自由编辑文本内容' },
 ];
 
+function safeParse(raw: string) {
+  if (!raw) return {};
+  let current: unknown = raw;
+  for (let i = 0; i < 2; i++) {
+    if (typeof current !== 'string') break;
+    try {
+      current = JSON.parse(current);
+    } catch {
+      break;
+    }
+  }
+  if (current && typeof current === 'object') {
+    return current as Record<string, any>;
+  }
+  try {
+    return JSON.parse(raw) as Record<string, any>;
+  } catch {
+    return {};
+  }
+}
+
+function defaultContentByType(type: BlockType): string {
+  if (type === 'hero') return JSON.stringify({ title: '', subtitle: '' });
+  if (type === 'product_intro') return JSON.stringify({ title: '产品介绍', description: '', features: [] });
+  if (type === 'gallery') return JSON.stringify({ assetIds: [] });
+  if (type === 'video') return JSON.stringify({ assetId: '' });
+  if (type === 'text') return JSON.stringify({ text: '' });
+  return '';
+}
+
 export default function PageEditor() {
   const navigate = useNavigate();
-  const { addPage } = useAppStore();
+  const { addPage, assets } = useAppStore();
   const { company } = useAuthStore();
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [blocks, setBlocks] = useState<PageBlock[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const imageAssets = assets.filter((a) => a.assetType === 'image');
+  const videoAssets = assets.filter((a) => a.assetType === 'video');
 
   const addBlock = (type: BlockType) => {
     const block: PageBlock = {
@@ -34,7 +67,7 @@ export default function PageEditor() {
       pageId: '',
       blockType: type,
       refAssetId: '',
-      contentJson: '',
+      contentJson: defaultContentByType(type),
       sortOrder: blocks.length,
     };
     setBlocks([...blocks, block]);
@@ -52,6 +85,10 @@ export default function PageEditor() {
     setBlocks(newBlocks.map((b, i) => ({ ...b, sortOrder: i })));
   };
 
+  const updateBlock = (id: string, updater: (block: PageBlock) => PageBlock) => {
+    setBlocks((prev) => prev.map((block) => (block.id === id ? updater(block) : block)));
+  };
+
   const handleSave = async (publishStatus: 'draft' | 'published') => {
     if (!title.trim()) {
       toast.error('请输入页面标题');
@@ -63,10 +100,11 @@ export default function PageEditor() {
         title,
         summary,
         publishStatus,
-        blocks: blocks.map((b) => ({
+        blocks: blocks.map((b, index) => ({
           blockType: b.blockType,
+          refAssetId: b.refAssetId || '',
           contentJson: b.contentJson,
-          sortOrder: b.sortOrder,
+          sortOrder: index,
         })),
       });
       addPage(data.data);
@@ -158,6 +196,227 @@ export default function PageEditor() {
                     <p className="text-xs text-gray-400">
                       {blockTemplates.find((t) => t.type === block.blockType)?.desc}
                     </p>
+
+                    {block.blockType === 'hero' && (
+                      <div className="mt-3 space-y-2">
+                        <select
+                          value={block.refAssetId || ''}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const selectedAsset = imageAssets.find((asset) => asset.id === selectedId);
+                            const content = safeParse(block.contentJson);
+                            content.imageUrl = selectedAsset?.url || '';
+                            updateBlock(block.id, (b) => ({
+                              ...b,
+                              refAssetId: selectedId,
+                              contentJson: JSON.stringify(content),
+                            }));
+                          }}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">封面图：不选择</option>
+                          {imageAssets.map((asset) => (
+                            <option key={asset.id} value={asset.id}>
+                              {asset.title || asset.url}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={safeParse(block.contentJson).title || ''}
+                          onChange={(e) => {
+                            const content = safeParse(block.contentJson);
+                            content.title = e.target.value;
+                            updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                          }}
+                          placeholder="封面标题（可选）"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={safeParse(block.contentJson).subtitle || ''}
+                          onChange={(e) => {
+                            const content = safeParse(block.contentJson);
+                            content.subtitle = e.target.value;
+                            updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                          }}
+                          placeholder="封面副标题（可选）"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        />
+                      </div>
+                    )}
+
+                    {block.blockType === 'company_intro' && (
+                      <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                        自动带入公司资料中的公司介绍内容。
+                      </div>
+                    )}
+
+                    {block.blockType === 'product_intro' && (
+                      <div className="mt-3 space-y-2">
+                        <input
+                          type="text"
+                          value={safeParse(block.contentJson).title || ''}
+                          onChange={(e) => {
+                            const content = safeParse(block.contentJson);
+                            content.title = e.target.value;
+                            updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                          }}
+                          placeholder="模块标题"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        />
+                        <textarea
+                          value={safeParse(block.contentJson).description || ''}
+                          onChange={(e) => {
+                            const content = safeParse(block.contentJson);
+                            content.description = e.target.value;
+                            updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                          }}
+                          placeholder="产品介绍描述"
+                          rows={3}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none"
+                        />
+                        <div className="space-y-2">
+                          {(Array.isArray(safeParse(block.contentJson).features) &&
+                          safeParse(block.contentJson).features.length > 0
+                            ? safeParse(block.contentJson).features
+                            : (Array.isArray(safeParse(block.contentJson).introItems)
+                              ? safeParse(block.contentJson).introItems
+                              : [])
+                          ).map((item: string, idx: number) => (
+                            <div key={`${block.id}-feature-${idx}`} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={item}
+                                onChange={(e) => {
+                                  const content = safeParse(block.contentJson);
+                                  const current = (
+                                    Array.isArray(content.features) && content.features.length > 0
+                                      ? content.features
+                                      : (Array.isArray(content.introItems) ? content.introItems : [])
+                                  ) as string[];
+                                  const next = [...current];
+                                  next[idx] = e.target.value;
+                                  content.features = next;
+                                  delete content.introItems;
+                                  updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                                }}
+                                placeholder={`卖点 ${idx + 1}`}
+                                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                              />
+                              <button
+                                onClick={() => {
+                                  const content = safeParse(block.contentJson);
+                                  const current = (
+                                    Array.isArray(content.features) && content.features.length > 0
+                                      ? content.features
+                                      : (Array.isArray(content.introItems) ? content.introItems : [])
+                                  ) as string[];
+                                  const next = current.filter((_: string, i: number) => i !== idx);
+                                  content.features = next;
+                                  delete content.introItems;
+                                  updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                                }}
+                                className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:bg-red-50"
+                                title="删除卖点"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => {
+                              const content = safeParse(block.contentJson);
+                              const current = (
+                                Array.isArray(content.features) && content.features.length > 0
+                                  ? content.features
+                                  : (Array.isArray(content.introItems) ? content.introItems : [])
+                              ) as string[];
+                              content.features = [...current, ''];
+                              delete content.introItems;
+                              updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            新增卖点
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {block.blockType === 'gallery' && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-gray-500">勾选要展示在轮播中的图片素材</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {imageAssets.map((asset) => {
+                            const content = safeParse(block.contentJson);
+                            const selected: string[] = content.assetIds || [];
+                            const checked = selected.includes(asset.id);
+                            return (
+                              <label
+                                key={asset.id}
+                                className="flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-2 text-xs"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    const next = e.target.checked
+                                      ? [...selected, asset.id]
+                                      : selected.filter((id: string) => id !== asset.id);
+                                    content.assetIds = next;
+                                    updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                                  }}
+                                />
+                                <span className="truncate">{asset.title || asset.url}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {block.blockType === 'video' && (
+                      <div className="mt-3 space-y-2">
+                        <select
+                          value={safeParse(block.contentJson).assetId || block.refAssetId || ''}
+                          onChange={(e) => {
+                            const content = safeParse(block.contentJson);
+                            content.assetId = e.target.value;
+                            updateBlock(block.id, (b) => ({
+                              ...b,
+                              refAssetId: e.target.value,
+                              contentJson: JSON.stringify(content),
+                            }));
+                          }}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        >
+                          <option value="">视频：不选择</option>
+                          {videoAssets.map((asset) => (
+                            <option key={asset.id} value={asset.id}>
+                              {asset.title || asset.url}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {block.blockType === 'text' && (
+                      <div className="mt-3">
+                        <textarea
+                          value={safeParse(block.contentJson).text || ''}
+                          onChange={(e) => {
+                            const content = safeParse(block.contentJson);
+                            content.text = e.target.value;
+                            updateBlock(block.id, (b) => ({ ...b, contentJson: JSON.stringify(content) }));
+                          }}
+                          placeholder="输入要展示的自定义文本"
+                          rows={4}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none"
+                        />
+                      </div>
+                    )}
                   </div>
                   <button onClick={() => removeBlock(block.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
                     <Trash2 className="w-4 h-4" />

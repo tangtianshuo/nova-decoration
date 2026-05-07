@@ -19,7 +19,7 @@ export default function PageShare() {
 
   const baseUrl = import.meta.env.VITE_WEB_BASE || window.location.origin;
   const shareUrl = existingLink ? `${baseUrl}/q/${existingLink.code}` : '';
-  const displayUrl = existingLink ? `${baseUrl}/s/${page?.slug}` : '';
+  const displayUrl = existingLink ? `${baseUrl}/s/${page?.id}` : '';
 
   useEffect(() => {
     if (existingLink && canvasRef.current) {
@@ -119,7 +119,7 @@ export default function PageShare() {
               <label className="block text-xs font-medium text-gray-500 mb-1">展示页地址</label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-700 truncate">{displayUrl}</code>
-                <Link to={`/s/${page.slug}`} target="_blank" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="预览">
+                <Link to={`/s/${page.id}`} target="_blank" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors" title="预览">
                   <ExternalLink className="w-4 h-4" />
                 </Link>
               </div>

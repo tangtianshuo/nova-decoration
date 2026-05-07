@@ -11,8 +11,16 @@ export default function ShowcaseVideo({ block, data }: Props) {
   const content = block.contentJson ? JSON.parse(block.contentJson) : {};
   const [playing, setPlaying] = useState(false);
 
-  const bilibiliAsset = data.assets.find((a) => a.sourceType === 'bilibili');
-  const videoAsset = data.assets.find((a) => a.assetType === 'video' && a.sourceType === 'upload');
+  const selectedAssetId = content.assetId || block.refAssetId || '';
+  const selectedAsset = selectedAssetId
+    ? data.assets.find((asset) => asset.id === selectedAssetId)
+    : null;
+  const bilibiliAsset = selectedAsset?.sourceType === 'bilibili'
+    ? selectedAsset
+    : data.assets.find((a) => a.sourceType === 'bilibili');
+  const videoAsset = selectedAsset?.assetType === 'video' && selectedAsset?.sourceType === 'upload'
+    ? selectedAsset
+    : data.assets.find((a) => a.assetType === 'video' && a.sourceType === 'upload');
 
   const bilibiliUrl = bilibiliAsset?.url || content.bilibiliUrl || '';
   const bilibiliBvid = bilibiliAsset?.bilibiliBvid || '';

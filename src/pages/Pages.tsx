@@ -1,11 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/app';
-import { Plus, QrCode, Eye, Edit3, MoreVertical } from 'lucide-react';
-import { useState } from 'react';
+import { Plus, QrCode, Eye, Edit3, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { toast } from 'sonner';
 
 export default function Pages() {
-  const { pages } = useAppStore();
+  const { pages, shareLinks, removePage } = useAppStore();
   const [filter, setFilter] = useState<'all' | 'published' | 'draft' | 'offline'>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
   const filtered = filter === 'all' ? pages : pages.filter((p) => p.publishStatus === filter);
 
@@ -15,8 +19,76 @@ export default function Pages() {
     offline: { label: '已下线', color: 'bg-red-50 text-red-600' },
   };
 
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await api.delete(`/pages/${id}`);
+      removePage(id);
+      toast.success('展示页已删除');
+      setPendingDelete(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const pendingLinkCount = pendingDelete
+    ? shareLinks.filter((link) => link.pageId === pendingDelete.id && link.status === 'active').length
+    : 0;
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (deletingId === pendingDelete.id) return;
+      setPendingDelete(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pendingDelete, deletingId]);
+
   return (
     <div className="space-y-6">
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => {
+            if (deletingId === pendingDelete.id) return;
+            setPendingDelete(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl border border-gray-200 shadow-xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900">确认删除展示页？</h3>
+            <p className="text-sm text-gray-600">
+              即将删除「{pendingDelete.title}」，该操作不可撤销。
+            </p>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+              删除后该页面关联的分享二维码将失效，用户扫码会进入兜底页。
+              {pendingLinkCount > 0 ? ` 当前有 ${pendingLinkCount} 个生效中的分享链接。` : ''}
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setPendingDelete(null)}
+                disabled={deletingId === pendingDelete.id}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleDelete(pendingDelete.id)}
+                disabled={deletingId === pendingDelete.id}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingId === pendingDelete.id ? '删除中...' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">展示页管理</h1>
@@ -84,7 +156,7 @@ export default function Pages() {
                     </Link>
                   )}
                   <Link
-                    to={`/s/${page.slug}`}
+                    to={`/s/${page.id}`}
                     target="_blank"
                     className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
                     title="预览"
@@ -98,8 +170,13 @@ export default function Pages() {
                   >
                     <Edit3 className="w-5 h-5" />
                   </Link>
-                  <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
-                    <MoreVertical className="w-5 h-5" />
+                  <button
+                    onClick={() => setPendingDelete({ id: page.id, title: page.title })}
+                    disabled={deletingId === page.id}
+                    className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                    title="删除"
+                  >
+                    <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
               </div>

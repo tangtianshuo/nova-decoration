@@ -1,12 +1,17 @@
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/app';
-import { Plus, Image, Film, ExternalLink } from 'lucide-react';
+import { Plus, Image, Film, ExternalLink, QrCode } from 'lucide-react';
+import { useState } from 'react';
+import type { Asset } from '@/types';
+import AssetQrModal from '@/components/AssetQrModal';
 
 export default function Assets() {
   const { assets } = useAppStore();
+  const [qrAsset, setQrAsset] = useState<Asset | null>(null);
 
   return (
     <div className="space-y-6">
+      <AssetQrModal asset={qrAsset} open={!!qrAsset} onClose={() => setQrAsset(null)} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">素材管理</h1>
@@ -67,9 +72,18 @@ export default function Assets() {
               </div>
               <div className="p-3">
                 <p className="text-sm font-medium text-gray-900 truncate">{asset.title || '未命名素材'}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {asset.sourceType === 'bilibili' ? 'Bilibili' : asset.assetType === 'image' ? '图片' : '视频'}
-                </p>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="text-xs text-gray-400">
+                    {asset.sourceType === 'bilibili' ? 'Bilibili' : asset.assetType === 'image' ? '图片' : '视频'}
+                  </p>
+                  <button
+                    onClick={() => setQrAsset(asset)}
+                    className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    二维码
+                  </button>
+                </div>
               </div>
             </div>
           ))}

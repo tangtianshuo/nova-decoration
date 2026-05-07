@@ -1,6 +1,7 @@
 name = "nova-decoration-api"
 main = "api/index.ts"
 compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
@@ -16,6 +17,8 @@ bucket_name = "nova-media-dev"
 DEFAULT_FALLBACK_URL = "http://localhost:5173/fallback"
 APP_WEB_URL = "http://localhost:5173"
 QRCODE_BASE_URL = "http://localhost:8787"
+DEV_UPLOAD_LOCAL = "true"
+LOCAL_UPLOAD_DIR = "./public/media"
 
 [triggers]
 crons = []
@@ -24,8 +27,12 @@ crons = []
 DEFAULT_FALLBACK_URL = "https://staging.yourdomain.com/fallback"
 APP_WEB_URL = "https://staging.yourdomain.com"
 QRCODE_BASE_URL = "https://q-staging.yourdomain.com"
+DEV_UPLOAD_LOCAL = "false"
+LOCAL_UPLOAD_DIR = "./public/media"
 
 [env.production.vars]
 DEFAULT_FALLBACK_URL = "https://www.yourdomain.com/fallback"
 APP_WEB_URL = "https://www.yourdomain.com"
 QRCODE_BASE_URL = "https://q.yourdomain.com"
+DEV_UPLOAD_LOCAL = "false"
+LOCAL_UPLOAD_DIR = "./public/media"

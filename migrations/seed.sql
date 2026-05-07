@@ -35,4 +35,7 @@ VALUES
   ('e7f8091a-8293-47a2-8374-d5e6f708192a', '708192a3-1b2c-403b-8c4d-6e7f8091a2b3', '0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b', 'contact', '', '', 5, '2026-04-18T10:00:00Z', '2026-04-18T10:00:00Z');
 
 INSERT INTO share_links (id, tenant_id, page_id, code, status, expire_at, fallback_url, scan_count, created_at, updated_at)
-VALUES ('f8091a2b-93a4-48b3-8475-e6f708192a3b', '0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b', '708192a3-1b2c-403b-8c4d-6e7f8091a2b3', 'AB12CD', 'active', NULL, '', 0, '2026-04-20T10:00:00Z', '2026-04-26T10:00:00Z');
+VALUES
+  ('f8091a2b-93a4-48b3-8475-e6f708192a3b', '0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b', '708192a3-1b2c-403b-8c4d-6e7f8091a2b3', 'AB12CD', 'active', NULL, '', 0, '2026-04-20T10:00:00Z', '2026-04-26T10:00:00Z'),
+  ('0a9b8c7d-6e5f-4a3b-9c8d-7e6f5a4b3c2d', '0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b', '708192a3-1b2c-403b-8c4d-6e7f8091a2b3', 'DSB123', 'disabled', NULL, 'http://localhost:5173/fallback?code=DSB123&reason=disabled', 0, '2026-04-20T10:00:00Z', '2026-04-26T10:00:00Z'),
+  ('1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5e', '0f1e2d3c-4b5a-4768-8a9b-0c1d2e3f4a5b', '708192a3-1b2c-403b-8c4d-6e7f8091a2b3', 'EXP123', 'active', '2020-01-01T00:00:00Z', 'http://localhost:5173/fallback?code=EXP123&reason=expired', 0, '2026-04-20T10:00:00Z', '2026-04-26T10:00:00Z');

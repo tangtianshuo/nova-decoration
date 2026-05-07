@@ -12,16 +12,16 @@ import { Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
 export default function Showcase() {
-  const { slug } = useParams<{ slug: string }>();
+  const { pageId } = useParams<{ pageId: string }>();
   const [data, setData] = useState<PublicPageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!pageId) return;
     setLoading(true);
     api
-      .get<PublicPageData>(`/public/pages/${slug}`)
+      .get<PublicPageData>(`/public/pages-by-id/${pageId}`)
       .then((res) => {
         setData(res.data);
         setError(null);
@@ -30,7 +30,7 @@ export default function Showcase() {
         setError(error instanceof Error ? error.message : '加载失败');
       })
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, [pageId]);
 
   useEffect(() => {
     if (data) {

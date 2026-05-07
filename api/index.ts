@@ -19,6 +19,8 @@ type Bindings = {
 	DEFAULT_FALLBACK_URL: string
 	APP_WEB_URL: string
 	QRCODE_BASE_URL: string
+	DEV_UPLOAD_LOCAL?: string
+	LOCAL_UPLOAD_DIR?: string
 }
 
 const app = new Hono<{ Bindings: Bindings; Variables: { requestId: string } }>()

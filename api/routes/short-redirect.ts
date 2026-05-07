@@ -145,5 +145,5 @@ export async function redirectByCode(c: Context<{ Bindings: Bindings }>) {
 	})
 
 	const webUrl = c.env.APP_WEB_URL || ""
-	return c.redirect(`${webUrl}/s/${page.slug}`)
+	return c.redirect(`${webUrl}/s/${page.id}`)
 }

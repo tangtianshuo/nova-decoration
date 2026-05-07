@@ -1,5 +1,5 @@
 import { Hono } from "hono"
-import { hashPassword, signJWT } from "../lib/auth"
+import { getAuthUser, hashPassword, signJWT } from "../lib/auth"
 import { fail, ok } from "../lib/response"
 
 type Bindings = {
@@ -13,6 +13,56 @@ const app = new Hono<{ Bindings: Bindings }>()
 function generateId(): string {
 	return crypto.randomUUID()
 }
+
+app.get("/me", async (c) => {
+	const authUser = await getAuthUser(c)
+	if (!authUser) return fail(c, 4003, "未登录", 401)
+
+	const db = c.env.DB
+	const user = await db
+		.prepare(
+			"SELECT id, tenant_id, email, role, status FROM users WHERE id = ? AND status = ?",
+		)
+		.bind(authUser.userId, "active")
+		.first()
+
+	if (!user) {
+		return fail(c, 4003, "用户不存在或已禁用", 401)
+	}
+
+	const company =
+		user.tenant_id &&
+		(await db
+			.prepare(
+				"SELECT id, tenant_id, name, logo_url, intro, contact_phone, contact_wechat, contact_address, status FROM companies WHERE tenant_id = ?",
+			)
+			.bind(user.tenant_id)
+			.first())
+
+	return ok(c, {
+		user: {
+			id: user.id,
+			tenantId: user.tenant_id || null,
+			companyId: user.tenant_id || null,
+			email: user.email,
+			role: user.role,
+			status: user.status,
+		},
+		company: company
+			? {
+					id: company.id,
+					tenantId: company.tenant_id,
+					name: company.name,
+					logoUrl: company.logo_url,
+					intro: company.intro,
+					contactPhone: company.contact_phone,
+					contactWechat: company.contact_wechat,
+					contactAddress: company.contact_address,
+					status: company.status,
+				}
+			: null,
+	})
+})
 
 app.post("/login", async (c) => {
 	const { email, password } = await c.req.json()

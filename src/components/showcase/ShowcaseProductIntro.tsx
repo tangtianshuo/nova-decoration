@@ -9,14 +9,19 @@ export default function ShowcaseProductIntro({ block }: Props) {
   const content = block.contentJson ? JSON.parse(block.contentJson) : {};
   const title = content.title || '产品介绍';
   const description = content.description || '';
-  const features: string[] = content.features || [];
+  const features: string[] =
+    (Array.isArray(content.features) && content.features.length > 0
+      ? content.features
+      : Array.isArray(content.introItems)
+        ? content.introItems
+        : []) || [];
 
   return (
     <section className="py-12 px-6">
       <div className="max-w-3xl mx-auto">
         <h2 className="text-2xl font-bold text-gray-900 text-center">{title}</h2>
         {description && (
-          <p className="text-gray-600 mt-4 text-center leading-relaxed">{description}</p>
+          <p className="text-gray-600 mt-4 text-center leading-relaxed whitespace-pre-line">{description}</p>
         )}
         {features.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { PublicPageData } from '@/types';
 
@@ -9,15 +9,26 @@ interface Props {
 
 export default function ShowcaseGallery({ block, data }: Props) {
   const content = block.contentJson ? JSON.parse(block.contentJson) : {};
+  const selectedIds: string[] = Array.isArray(content.assetIds) ? content.assetIds : [];
   const imageUrls: string[] = content.imageUrls || [];
-  const images = data.assets
-    .filter((a) => a.assetType === 'image' && a.sourceType === 'upload')
-    .map((a) => ({ url: a.url, title: a.title }));
-  const allImages = [...images, ...imageUrls.map((url, i) => ({ url, title: `图片 ${i + 1}` }))];
+  const allTenantImageAssets = data.assets.filter((a) => a.assetType === 'image' && a.sourceType === 'upload');
+  const images = selectedIds.length > 0
+    ? allTenantImageAssets.filter((asset) => selectedIds.includes(asset.id))
+    : allTenantImageAssets;
+  const mappedImages = images.map((asset) => ({ url: asset.url, title: asset.title }));
+  const allImages = [...mappedImages, ...imageUrls.map((url, i) => ({ url, title: `图片 ${i + 1}` }))];
 
   const [current, setCurrent] = useState(0);
 
   if (allImages.length === 0) return null;
+
+  useEffect(() => {
+    if (allImages.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setCurrent((c) => (c === allImages.length - 1 ? 0 : c + 1));
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, [allImages.length]);
 
   const prev = () => setCurrent((c) => (c === 0 ? allImages.length - 1 : c - 1));
   const next = () => setCurrent((c) => (c === allImages.length - 1 ? 0 : c + 1));

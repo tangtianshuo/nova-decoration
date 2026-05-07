@@ -46,6 +46,31 @@ pnpm run check
 pnpm run build
 ```
 
+## 端到端测试（Playwright）
+
+首次运行先安装浏览器：
+
+```bash
+pnpm run e2e:install
+```
+
+运行 E2E（默认无头）：
+
+```bash
+pnpm run e2e
+```
+
+可视化调试：
+
+```bash
+pnpm run e2e:headed
+pnpm run e2e:ui
+```
+
+说明：
+- Playwright 会自动启动 Vite（`--mode e2e`），并读取 `.env.e2e`。
+- 当前用例使用 Mock 登录流程，不依赖 API 服务即可执行。
+
 ## 环境说明
 
 - `wrangler.toml` 默认是本地开发配置。

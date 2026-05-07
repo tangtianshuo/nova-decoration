@@ -107,6 +107,11 @@ export interface LoginResponse {
 	company: Company | null
 }
 
+export interface AuthMeResponse {
+	user: User
+	company: Company | null
+}
+
 export interface UploadSignRequest {
 	assetType: "image" | "video"
 	fileName: string

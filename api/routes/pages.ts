@@ -23,6 +23,31 @@ function generateSlug(title: string): string {
 	)
 }
 
+function normalizeContentJson(raw: unknown): string {
+	if (raw === null || raw === undefined) return ""
+
+	let current: unknown = raw
+	for (let i = 0; i < 2; i++) {
+		if (typeof current !== "string") break
+		try {
+			current = JSON.parse(current)
+		} catch {
+			break
+		}
+	}
+
+	if (typeof current === "string") return current
+	try {
+		return JSON.stringify(current)
+	} catch {
+		return ""
+	}
+}
+
+function serializeBlockContent(block: any): string {
+	return normalizeContentJson(block.contentJson ?? block.content_json ?? "")
+}
+
 function mapPageBlockRow(block: any) {
 	return {
 		id: block.id,
@@ -31,7 +56,7 @@ function mapPageBlockRow(block: any) {
 		companyId: block.tenant_id,
 		blockType: block.block_type,
 		refAssetId: block.ref_asset_id,
-		contentJson: block.content_json,
+		contentJson: normalizeContentJson(block.content_json),
 		sortOrder: block.sort_order,
 		createdAt: block.created_at,
 		updatedAt: block.updated_at,
@@ -119,7 +144,7 @@ app.post("/", async (c) => {
 					user.tenantId,
 					block.blockType,
 					block.refAssetId || "",
-					JSON.stringify(block.contentJson || block.content_json || ""),
+					serializeBlockContent(block),
 					i,
 					now,
 					now,
@@ -201,7 +226,7 @@ app.put("/:id", async (c) => {
 					user.tenantId,
 					block.blockType,
 					block.refAssetId || "",
-					JSON.stringify(block.contentJson || block.content_json || ""),
+					serializeBlockContent(block),
 					i,
 					now,
 					now,

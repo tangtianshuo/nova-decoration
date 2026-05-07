@@ -7,6 +7,8 @@ type Bindings = {
 	BUCKET: R2Bucket
 	JWT_SECRET: string
 	APP_WEB_URL: string
+	DEV_UPLOAD_LOCAL?: string
+	LOCAL_UPLOAD_DIR?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -24,6 +26,73 @@ const ALLOWED_IMAGE_TYPES = [
 const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"]
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024
+
+function isLocalUploadEnabled(c: any): boolean {
+	return String(c.env.DEV_UPLOAD_LOCAL || "false").toLowerCase() === "true"
+}
+
+function normalizeObjectKey(objectKey: string): string {
+	return objectKey.replace(/\\/g, "/").replace(/\.\./g, "").replace(/^\/+/, "")
+}
+
+async function resolveLocalTarget(objectKey: string, baseDir?: string) {
+	const pathMod = await import("node:path")
+	const cwd =
+		typeof process !== "undefined" && process.cwd ? process.cwd() : "."
+	const rootDir = pathMod.resolve(cwd, baseDir || "public/media")
+	const safeKey = normalizeObjectKey(objectKey)
+	const fullPath = pathMod.resolve(rootDir, safeKey)
+	if (!fullPath.startsWith(rootDir + pathMod.sep) && fullPath !== rootDir) {
+		throw new Error("invalid object key path")
+	}
+	return { rootDir, fullPath, safeKey }
+}
+
+async function writeLocalObject(c: any, objectKey: string, body: ArrayBuffer) {
+	const fs = await import("node:fs/promises")
+	const { fullPath } = await resolveLocalTarget(
+		objectKey,
+		c.env.LOCAL_UPLOAD_DIR,
+	)
+	const pathMod = await import("node:path")
+	await fs.mkdir(pathMod.dirname(fullPath), { recursive: true })
+	await fs.writeFile(fullPath, new Uint8Array(body))
+}
+
+async function statLocalObject(
+	c: any,
+	objectKey: string,
+): Promise<{ size: number } | null> {
+	try {
+		const fs = await import("node:fs/promises")
+		const { fullPath } = await resolveLocalTarget(
+			objectKey,
+			c.env.LOCAL_UPLOAD_DIR,
+		)
+		const stat = await fs.stat(fullPath)
+		return { size: Number(stat.size || 0) }
+	} catch {
+		return null
+	}
+}
+
+async function deleteLocalObject(c: any, objectKey: string) {
+	try {
+		const fs = await import("node:fs/promises")
+		const { fullPath } = await resolveLocalTarget(
+			objectKey,
+			c.env.LOCAL_UPLOAD_DIR,
+		)
+		await fs.unlink(fullPath)
+	} catch {
+		// 文件不存在时忽略
+	}
+}
+
+function isFsNotImplementedError(error: unknown): boolean {
+	const msg = String(error || "")
+	return msg.includes("[unenv]") && msg.includes("not implemented")
+}
 
 function mapAssetRow(asset: any) {
 	return {
@@ -44,7 +113,7 @@ function mapAssetRow(asset: any) {
 	}
 }
 
-app.post("/upload/sign", async (c) => {
+app.post("/sign", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
 	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
@@ -78,7 +147,7 @@ app.post("/upload/sign", async (c) => {
 	})
 })
 
-app.put("/upload/direct/:key{.+}", async (c) => {
+app.put("/direct/:key{.+}", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
 	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
@@ -91,10 +160,26 @@ app.put("/upload/direct/:key{.+}", async (c) => {
 	const body = await c.req.arrayBuffer()
 	const contentType = c.req.header("Content-Type") || "application/octet-stream"
 
-	await c.env.BUCKET.put(objectKey, body, {
-		httpMetadata: { contentType },
-		customMetadata: { tenantId: user.tenantId, uploadedBy: user.userId },
-	})
+	if (isLocalUploadEnabled(c)) {
+		try {
+			await writeLocalObject(c, objectKey, body)
+		} catch (error) {
+			if (!isFsNotImplementedError(error)) throw error
+			console.warn("[upload_local_fallback_r2]", {
+				reason: String(error),
+				objectKey,
+			})
+			await c.env.BUCKET.put(objectKey, body, {
+				httpMetadata: { contentType },
+				customMetadata: { tenantId: user.tenantId, uploadedBy: user.userId },
+			})
+		}
+	} else {
+		await c.env.BUCKET.put(objectKey, body, {
+			httpMetadata: { contentType },
+			customMetadata: { tenantId: user.tenantId, uploadedBy: user.userId },
+		})
+	}
 
 	return ok(c, { objectKey })
 })
@@ -112,8 +197,19 @@ app.post("/complete", async (c) => {
 	const db = c.env.DB
 	const now = new Date().toISOString()
 	const mediaBase = c.env.APP_WEB_URL || ""
-	const url = `${mediaBase}/media/${objectKey}`
-	const object = await c.env.BUCKET.head(objectKey)
+	const normalizedKey = normalizeObjectKey(objectKey)
+	const url = `${mediaBase}/media/${normalizedKey}`
+	let object: { size: number } | null = null
+	if (isLocalUploadEnabled(c)) {
+		object = await statLocalObject(c, normalizedKey)
+		if (!object) {
+			const r2Obj = await c.env.BUCKET.head(normalizedKey)
+			object = r2Obj ? { size: Number(r2Obj.size || 0) } : null
+		}
+	} else {
+		const r2Obj = await c.env.BUCKET.head(normalizedKey)
+		object = r2Obj ? { size: Number(r2Obj.size || 0) } : null
+	}
 	if (!object) {
 		return fail(c, 4004, "上传对象不存在或已失效", 404)
 	}
@@ -238,7 +334,12 @@ app.delete("/:id", async (c) => {
 
 	if (asset.source_type === "upload" && asset.url) {
 		const objectKey = (asset.url as string).split("/media/")[1]
-		if (objectKey) await c.env.BUCKET.delete(objectKey)
+		if (objectKey) {
+			if (isLocalUploadEnabled(c)) {
+				await deleteLocalObject(c, objectKey)
+			}
+			await c.env.BUCKET.delete(objectKey)
+		}
 	}
 
 	await db

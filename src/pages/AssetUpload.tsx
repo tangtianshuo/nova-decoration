@@ -2,8 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Link as LinkIcon, Image, Film } from 'lucide-react';
 import { useAppStore } from '@/store/app';
+import { useAuthStore } from '@/store/auth';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import type { Asset } from '@/types';
+import AssetQrModal from '@/components/AssetQrModal';
 
 type TabType = 'upload' | 'bilibili';
 
@@ -16,7 +19,9 @@ export default function AssetUpload() {
   const [bilibiliTitle, setBilibiliTitle] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [qrAsset, setQrAsset] = useState<Asset | null>(null);
   const { addAsset } = useAppStore();
+  const token = useAuthStore((state) => state.token);
   const navigate = useNavigate();
 
   const handleUpload = async () => {
@@ -49,6 +54,9 @@ export default function AssetUpload() {
         });
         xhr.addEventListener('error', () => reject(new Error('上传失败')));
         xhr.open('PUT', signData.data.uploadUrl);
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
         Object.entries(signData.data.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v as string));
         xhr.send(file);
       });
@@ -58,9 +66,12 @@ export default function AssetUpload() {
         assetType,
         title: title || file.name,
       });
-      addAsset(completeData.data);
+      const asset = completeData.data as Asset;
+      addAsset(asset);
       toast.success('上传成功');
-      navigate('/assets');
+      setQrAsset(asset);
+      setFile(null);
+      setTitle('');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '上传失败，请重试');
     } finally {
@@ -80,9 +91,12 @@ export default function AssetUpload() {
         url: bilibiliUrl,
         title: bilibiliTitle,
       });
-      addAsset(data.data);
+      const asset = data.data as Asset;
+      addAsset(asset);
       toast.success('Bilibili视频已添加');
-      navigate('/assets');
+      setQrAsset(asset);
+      setBilibiliUrl('');
+      setBilibiliTitle('');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '网络错误');
     } finally {
@@ -92,9 +106,18 @@ export default function AssetUpload() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <AssetQrModal asset={qrAsset} open={!!qrAsset} onClose={() => setQrAsset(null)} />
       <div>
         <h1 className="text-2xl font-bold text-gray-900">添加素材</h1>
         <p className="text-gray-500 mt-1">上传图片/视频或添加Bilibili外链</p>
+      </div>
+      <div className="flex justify-end">
+        <button
+          onClick={() => navigate('/assets')}
+          className="text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
+        >
+          前往素材库查看卡片二维码
+        </button>
       </div>
 
       <div className="flex gap-2">
