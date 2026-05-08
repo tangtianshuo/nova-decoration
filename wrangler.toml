@@ -17,6 +17,7 @@ bucket_name = "nova-media-dev"
 DEFAULT_FALLBACK_URL = "http://localhost:5173/fallback"
 APP_WEB_URL = "http://localhost:5173"
 QRCODE_BASE_URL = "http://localhost:8787"
+MEDIA_BASE_URL = "http://localhost:5173"
 DEV_UPLOAD_LOCAL = "true"
 LOCAL_UPLOAD_DIR = "./public/media"
 
@@ -27,12 +28,29 @@ crons = []
 DEFAULT_FALLBACK_URL = "https://staging.yourdomain.com/fallback"
 APP_WEB_URL = "https://staging.yourdomain.com"
 QRCODE_BASE_URL = "https://q-staging.yourdomain.com"
+MEDIA_BASE_URL = "https://media-staging.yourdomain.com"
 DEV_UPLOAD_LOCAL = "false"
 LOCAL_UPLOAD_DIR = "./public/media"
 
 [env.production.vars]
-DEFAULT_FALLBACK_URL = "https://www.yourdomain.com/fallback"
-APP_WEB_URL = "https://www.yourdomain.com"
-QRCODE_BASE_URL = "https://q.yourdomain.com"
+DEFAULT_FALLBACK_URL = "https://decoration.novai.net.cn/fallback"
+APP_WEB_URL = "https://decoration.novai.net.cn"
+QRCODE_BASE_URL = "https://decoration.novai.net.cn"
+MEDIA_BASE_URL = "https://download.decoration.novai.net.cn"
 DEV_UPLOAD_LOCAL = "false"
 LOCAL_UPLOAD_DIR = "./public/media"
+
+[env.production]
+routes = [
+	{ pattern = "decoration.novai.net.cn/api/*", zone_name = "novai.net.cn" },
+	{ pattern = "decoration.novai.net.cn/q/*", zone_name = "novai.net.cn" }
+]
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "nova-decoration-media-prod"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "nova-decoration-prod"
+database_id = "4e1359ec-c785-4b96-8ee2-fdcb2ab8ca50"

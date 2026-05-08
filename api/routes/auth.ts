@@ -82,8 +82,21 @@ app.post("/login", async (c) => {
 		return fail(c, 4003, "邮箱或密码错误", 401)
 	}
 
-	const hash = await hashPassword(password, c.env.PASSWORD_PEPPER ?? "")
-	if (hash !== user.password_hash) {
+	const pepper = c.env.PASSWORD_PEPPER ?? ""
+	const hashWithPepper = await hashPassword(password, pepper)
+	let passwordValid = hashWithPepper === user.password_hash
+	if (!passwordValid && pepper) {
+		// 兼容历史种子账号（无 pepper 的 password_hash），并在首次登录后自动升级哈希。
+		const legacyHash = await hashPassword(password, "")
+		if (legacyHash === user.password_hash) {
+			passwordValid = true
+			await db
+				.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+				.bind(hashWithPepper, new Date().toISOString(), user.id)
+				.run()
+		}
+	}
+	if (!passwordValid) {
 		return fail(c, 4003, "邮箱或密码错误", 401)
 	}
 

@@ -7,6 +7,7 @@ type Bindings = {
 	BUCKET: R2Bucket
 	JWT_SECRET: string
 	APP_WEB_URL: string
+	MEDIA_BASE_URL?: string
 	DEV_UPLOAD_LOCAL?: string
 	LOCAL_UPLOAD_DIR?: string
 }
@@ -33,6 +34,39 @@ function isLocalUploadEnabled(c: any): boolean {
 
 function normalizeObjectKey(objectKey: string): string {
 	return objectKey.replace(/\\/g, "/").replace(/\.\./g, "").replace(/^\/+/, "")
+}
+
+function joinUrl(base: string, path: string): string {
+	return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
+}
+
+function buildAssetUrl(c: any, normalizedKey: string): string {
+	const mediaBase = c.env.MEDIA_BASE_URL || c.env.APP_WEB_URL || ""
+	if (!mediaBase) {
+		return `/media/${normalizedKey}`
+	}
+	// 本地上传文件默认由前端静态目录 /media 承载；R2 自定义域名直链使用根路径对象 key。
+	if (isLocalUploadEnabled(c)) {
+		return joinUrl(mediaBase, `media/${normalizedKey}`)
+	}
+	return joinUrl(mediaBase, normalizedKey)
+}
+
+function extractObjectKeyFromAssetUrl(assetUrl: string): string | null {
+	try {
+		const parsed = new URL(assetUrl)
+		const path = parsed.pathname.replace(/^\/+/, "")
+		if (!path) return null
+		return normalizeObjectKey(
+			path.startsWith("media/") ? path.slice("media/".length) : path,
+		)
+	} catch {
+		const cleaned = assetUrl.replace(/^\/+/, "")
+		if (!cleaned) return null
+		return normalizeObjectKey(
+			cleaned.startsWith("media/") ? cleaned.slice("media/".length) : cleaned,
+		)
+	}
 }
 
 async function resolveLocalTarget(objectKey: string, baseDir?: string) {
@@ -196,9 +230,8 @@ app.post("/complete", async (c) => {
 
 	const db = c.env.DB
 	const now = new Date().toISOString()
-	const mediaBase = c.env.APP_WEB_URL || ""
 	const normalizedKey = normalizeObjectKey(objectKey)
-	const url = `${mediaBase}/media/${normalizedKey}`
+	const url = buildAssetUrl(c, normalizedKey)
 	let object: { size: number } | null = null
 	if (isLocalUploadEnabled(c)) {
 		object = await statLocalObject(c, normalizedKey)
@@ -333,7 +366,7 @@ app.delete("/:id", async (c) => {
 	if (!asset) return fail(c, 4004, "素材不存在", 404)
 
 	if (asset.source_type === "upload" && asset.url) {
-		const objectKey = (asset.url as string).split("/media/")[1]
+		const objectKey = extractObjectKeyFromAssetUrl(String(asset.url))
 		if (objectKey) {
 			if (isLocalUploadEnabled(c)) {
 				await deleteLocalObject(c, objectKey)

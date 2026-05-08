@@ -35,7 +35,12 @@ app.use("*", async (c, next) => {
 app.use(
 	"*",
 	cors({
-		origin: ["http://localhost:5173", "http://localhost:3000"],
+		origin: [
+			"http://localhost:5173",
+			"http://localhost:3000",
+			"http://decoration.novai.net.cn",
+			"https://decoration.novai.net.cn",
+		],
 		allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 		allowHeaders: ["Content-Type", "Authorization"],
 		maxAge: 86400,

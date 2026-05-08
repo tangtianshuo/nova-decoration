@@ -8,24 +8,33 @@ interface Props {
 }
 
 export default function ShowcaseVideo({ block, data }: Props) {
-  const content = block.contentJson ? JSON.parse(block.contentJson) : {};
+  const content = (() => {
+    if (!block.contentJson) return {};
+    try {
+      return JSON.parse(block.contentJson);
+    } catch {
+      return {};
+    }
+  })();
   const [playing, setPlaying] = useState(false);
 
   const selectedAssetId = content.assetId || block.refAssetId || '';
   const selectedAsset = selectedAssetId
     ? data.assets.find((asset) => asset.id === selectedAssetId)
     : null;
-  const bilibiliAsset = selectedAsset?.sourceType === 'bilibili'
-    ? selectedAsset
-    : data.assets.find((a) => a.sourceType === 'bilibili');
-  const videoAsset = selectedAsset?.assetType === 'video' && selectedAsset?.sourceType === 'upload'
-    ? selectedAsset
-    : data.assets.find((a) => a.assetType === 'video' && a.sourceType === 'upload');
+  const bilibiliAsset =
+    selectedAsset?.assetType === 'video' && selectedAsset?.sourceType === 'bilibili'
+      ? selectedAsset
+      : null;
+  const videoAsset =
+    selectedAsset?.assetType === 'video' && selectedAsset?.sourceType === 'upload'
+      ? selectedAsset
+      : null;
 
-  const bilibiliUrl = bilibiliAsset?.url || content.bilibiliUrl || '';
+  const bilibiliUrl = bilibiliAsset?.url || (!selectedAssetId ? content.bilibiliUrl || '' : '');
   const bilibiliBvid = bilibiliAsset?.bilibiliBvid || '';
-  const videoUrl = videoAsset?.url || content.videoUrl || '';
-  const coverUrl = videoAsset?.coverUrl || content.coverUrl || '';
+  const videoUrl = videoAsset?.url || (!selectedAssetId ? content.videoUrl || '' : '');
+  const coverUrl = videoAsset?.coverUrl || (!selectedAssetId ? content.coverUrl || '' : '');
 
   const getBilibiliEmbedUrl = (url: string) => {
     const match = url.match(/BV[\w]+/);
@@ -62,7 +71,7 @@ export default function ShowcaseVideo({ block, data }: Props) {
                       <Play className="w-7 h-7 text-white ml-1" />
                     </div>
                     <p className="text-sm text-gray-600">点击播放视频</p>
-                    {bilibiliBvid && <p className="text-xs text-gray-400 mt-1">BV{bilibiliBvid}</p>}
+                    {bilibiliBvid && <p className="text-xs text-gray-400 mt-1">{bilibiliBvid}</p>}
                   </div>
                 </div>
               )}
