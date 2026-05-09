@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/app';
 import { Plus, QrCode, Eye, Edit3, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -6,9 +6,11 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function Pages() {
-  const { pages, shareLinks, removePage } = useAppStore();
+  const navigate = useNavigate();
+  const { pages, shareLinks, removePage, updatePage, addShareLink } = useAppStore();
   const [filter, setFilter] = useState<'all' | 'published' | 'draft' | 'offline'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
   const filtered = filter === 'all' ? pages : pages.filter((p) => p.publishStatus === filter);
@@ -30,6 +32,24 @@ export default function Pages() {
       toast.error(error instanceof Error ? error.message : '删除失败');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handlePublishAndCreateQr = async (id: string) => {
+    setPublishingId(id);
+    try {
+      const published = await api.post<any>(`/pages/${id}/publish`);
+      updatePage(published.data);
+      const share = await api.post<any>('/share-links', { pageId: id, expireAt: null });
+      if (!shareLinks.find((item) => item.id === share.data.id)) {
+        addShareLink(share.data);
+      }
+      toast.success('已发布并生成二维码');
+      navigate(`/pages/${id}/share`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '发布失败');
+    } finally {
+      setPublishingId(null);
     }
   };
 
@@ -154,6 +174,16 @@ export default function Pages() {
                     >
                       <QrCode className="w-5 h-5" />
                     </Link>
+                  )}
+                  {page.publishStatus === 'draft' && (
+                    <button
+                      onClick={() => handlePublishAndCreateQr(page.id)}
+                      disabled={publishingId === page.id}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+                      title="发布并生成二维码"
+                    >
+                      {publishingId === page.id ? '发布中...' : '发布并生成二维码'}
+                    </button>
                   )}
                   <Link
                     to={`/s/${page.id}`}

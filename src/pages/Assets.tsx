@@ -1,17 +1,116 @@
 import { Link } from 'react-router-dom';
 import { useAppStore } from '@/store/app';
-import { Plus, Image, Film, ExternalLink, QrCode } from 'lucide-react';
-import { useState } from 'react';
+import { Plus, Image, Film, ExternalLink, QrCode, Trash2, RefreshCw } from 'lucide-react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import type { Asset } from '@/types';
 import AssetQrModal from '@/components/AssetQrModal';
+import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
+import { toast } from 'sonner';
 
 export default function Assets() {
-  const { assets } = useAppStore();
+  const { assets, removeAsset, updateAsset } = useAppStore();
+  const token = useAuthStore((state) => state.token);
   const [qrAsset, setQrAsset] = useState<Asset | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [replacingId, setReplacingId] = useState<string | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<Asset | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDelete = async (asset: Asset) => {
+    if (!window.confirm(`确认删除素材「${asset.title || '未命名素材'}」？`)) return;
+    setDeletingId(asset.id);
+    try {
+      await api.delete(`/assets/${asset.id}`);
+      removeAsset(asset.id);
+      toast.success('素材已删除');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const openReplace = (asset: Asset) => {
+    if (asset.sourceType === 'bilibili') return;
+    setReplaceTarget(asset);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleReplaceBilibili = async (asset: Asset) => {
+    const url = window.prompt('请输入新的 Bilibili 链接', asset.url || '');
+    if (!url) return;
+    const title = window.prompt('请输入素材标题（可选）', asset.title || '') || asset.title;
+    setReplacingId(asset.id);
+    try {
+      const data = await api.post<Asset>(`/assets/${asset.id}/replace`, { url, title });
+      updateAsset(data.data);
+      toast.success('Bilibili 素材已替换');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '替换失败');
+    } finally {
+      setReplacingId(null);
+    }
+  };
+
+  const handleReplaceFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    const target = replaceTarget;
+    if (!file || !target) return;
+
+    setReplacingId(target.id);
+    try {
+      const signData = await api.post<{
+        uploadUrl: string;
+        objectKey: string;
+        headers?: Record<string, string>;
+      }>('/upload/sign', {
+        assetType: target.assetType,
+        fileName: file.name,
+        contentType: file.type,
+        sizeBytes: file.size,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error('替换上传失败'));
+        });
+        xhr.addEventListener('error', () => reject(new Error('替换上传失败')));
+        xhr.open('PUT', signData.data.uploadUrl);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        Object.entries(signData.data.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v as string));
+        xhr.send(file);
+      });
+
+      const replaced = await api.post<Asset>(`/assets/${target.id}/replace`, {
+        objectKey: signData.data.objectKey,
+        title: target.title || file.name,
+      });
+      updateAsset(replaced.data);
+      toast.success('素材已替换');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '替换失败');
+    } finally {
+      setReplacingId(null);
+      setReplaceTarget(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <AssetQrModal asset={qrAsset} open={!!qrAsset} onClose={() => setQrAsset(null)} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept={replaceTarget?.assetType === 'image' ? 'image/*' : 'video/*'}
+        onChange={handleReplaceFileChange}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">素材管理</h1>
@@ -76,13 +175,31 @@ export default function Assets() {
                   <p className="text-xs text-gray-400">
                     {asset.sourceType === 'bilibili' ? 'Bilibili' : asset.assetType === 'image' ? '图片' : '视频'}
                   </p>
-                  <button
-                    onClick={() => setQrAsset(asset)}
-                    className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
-                  >
-                    <QrCode className="w-3.5 h-3.5" />
-                    二维码
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setQrAsset(asset)}
+                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      二维码
+                    </button>
+                    <button
+                      onClick={() => (asset.sourceType === 'bilibili' ? handleReplaceBilibili(asset) : openReplace(asset))}
+                      disabled={replacingId === asset.id}
+                      className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      {replacingId === asset.id ? '替换中...' : '替换'}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(asset)}
+                      disabled={deletingId === asset.id}
+                      className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      {deletingId === asset.id ? '删除中...' : '删除'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

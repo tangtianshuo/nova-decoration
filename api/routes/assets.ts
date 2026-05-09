@@ -147,6 +147,26 @@ function mapAssetRow(asset: any) {
 	}
 }
 
+async function findAssetUsagePageTitles(c: any, assetId: string, tenantId: string) {
+	const db = c.env.DB
+	const usage = await db
+		.prepare(
+			`SELECT DISTINCT p.title
+       FROM page_blocks pb
+       JOIN pages p ON p.id = pb.page_id
+       WHERE pb.tenant_id = ?
+         AND p.tenant_id = ?
+         AND (
+           pb.ref_asset_id = ?
+           OR (json_valid(pb.content_json) AND json_extract(pb.content_json, '$.assetId') = ?)
+           OR pb.content_json LIKE ?
+         )`,
+		)
+		.bind(tenantId, tenantId, assetId, assetId, `%${assetId}%`)
+		.all()
+	return (usage.results || []).map((row: any) => String(row.title || "未命名展示页"))
+}
+
 app.post("/sign", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
@@ -365,6 +385,16 @@ app.delete("/:id", async (c) => {
 		.first()
 	if (!asset) return fail(c, 4004, "素材不存在", 404)
 
+	const usedByPages = await findAssetUsagePageTitles(c, id, user.tenantId)
+	if (usedByPages.length > 0) {
+		return fail(
+			c,
+			4091,
+			`素材正在被展示页使用，无法删除。请先删除相关展示页：${usedByPages.join("、")}`,
+			409,
+		)
+	}
+
 	if (asset.source_type === "upload" && asset.url) {
 		const objectKey = extractObjectKeyFromAssetUrl(String(asset.url))
 		if (objectKey) {
@@ -381,6 +411,81 @@ app.delete("/:id", async (c) => {
 		.run()
 
 	return ok(c, null)
+})
+
+app.post("/:id/replace", async (c) => {
+	const user = await getAuthUser(c)
+	if (!user) return fail(c, 4003, "未登录", 401)
+	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+
+	const id = c.req.param("id")
+	const db = c.env.DB
+	const asset = await db
+		.prepare("SELECT * FROM assets WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
+		.first()
+	if (!asset) return fail(c, 4004, "素材不存在", 404)
+
+	const body = await c.req.json()
+	const now = new Date().toISOString()
+
+	if (asset.source_type === "upload") {
+		const objectKey = normalizeObjectKey(String(body.objectKey || ""))
+		if (!objectKey) return fail(c, 4001, "缺少 objectKey", 400)
+		if (!objectKey.startsWith(`tenant/${user.tenantId}/`)) {
+			return fail(c, 4003, "无权限", 403)
+		}
+
+		let object: { size: number } | null = null
+		if (isLocalUploadEnabled(c)) {
+			object = await statLocalObject(c, objectKey)
+			if (!object) {
+				const r2Obj = await c.env.BUCKET.head(objectKey)
+				object = r2Obj ? { size: Number(r2Obj.size || 0) } : null
+			}
+		} else {
+			const r2Obj = await c.env.BUCKET.head(objectKey)
+			object = r2Obj ? { size: Number(r2Obj.size || 0) } : null
+		}
+		if (!object) return fail(c, 4004, "替换素材不存在或已失效", 404)
+
+		const oldKey = extractObjectKeyFromAssetUrl(String(asset.url || ""))
+		if (oldKey && oldKey !== objectKey) {
+			if (isLocalUploadEnabled(c)) {
+				await deleteLocalObject(c, oldKey)
+			}
+			await c.env.BUCKET.delete(oldKey)
+		}
+
+		const nextUrl = buildAssetUrl(c, objectKey)
+		const nextTitle = String(body.title || asset.title || "")
+		await db
+			.prepare(
+				"UPDATE assets SET url = ?, title = ?, size_bytes = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
+			)
+			.bind(nextUrl, nextTitle, Number(object.size || 0), now, id, user.tenantId)
+			.run()
+	} else if (asset.source_type === "bilibili") {
+		const url = String(body.url || "")
+		if (!url) return fail(c, 4001, "请输入Bilibili链接", 400)
+		const bvMatch = url.match(/BV[\w]+/)
+		if (!bvMatch) return fail(c, 4001, "无法识别Bilibili视频链接", 400)
+		const nextTitle = String(body.title || asset.title || bvMatch[0])
+		await db
+			.prepare(
+				"UPDATE assets SET url = ?, bilibili_bvid = ?, title = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
+			)
+			.bind(url, bvMatch[0], nextTitle, now, id, user.tenantId)
+			.run()
+	} else {
+		return fail(c, 4001, "不支持的素材类型", 400)
+	}
+
+	const updated = await db
+		.prepare("SELECT * FROM assets WHERE id = ? AND tenant_id = ?")
+		.bind(id, user.tenantId)
+		.first()
+	return ok(c, mapAssetRow(updated))
 })
 
 export default app

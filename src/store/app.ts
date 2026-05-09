@@ -7,6 +7,7 @@ interface AppState {
 	shareLinks: ShareLink[]
 	setAssets: (assets: Asset[]) => void
 	addAsset: (asset: Asset) => void
+	updateAsset: (asset: Asset) => void
 	removeAsset: (id: string) => void
 	setPages: (pages: ShowcasePage[]) => void
 	addPage: (page: ShowcasePage) => void
@@ -22,6 +23,10 @@ export const useAppStore = create<AppState>((set) => ({
 	shareLinks: [],
 	setAssets: (assets) => set({ assets }),
 	addAsset: (asset) => set((s) => ({ assets: [...s.assets, asset] })),
+	updateAsset: (asset) =>
+		set((s) => ({
+			assets: s.assets.map((a) => (a.id === asset.id ? asset : a)),
+		})),
 	removeAsset: (id) =>
 		set((s) => ({ assets: s.assets.filter((a) => a.id !== id) })),
 	setPages: (pages) => set({ pages }),
