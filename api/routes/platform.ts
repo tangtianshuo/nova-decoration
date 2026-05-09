@@ -1,5 +1,11 @@
 import { Hono, type Context } from "hono"
 import { getAuthUser, hashPassword } from "../lib/auth"
+import {
+	getTenantSubscription,
+	getTenantTransactions,
+	getTenantUsage,
+	resolveQuotaLimits,
+} from "../lib/commercial"
 import { fail, ok } from "../lib/response"
 
 type Bindings = {
@@ -366,6 +372,102 @@ app.get("/tenants/:tenantId", async (c) => {
 			updatedAt: u.updated_at,
 		})),
 	})
+})
+
+app.get("/tenants/:tenantId/commercial", async (c) => {
+	const auth = await requireSuperAdmin(c)
+	if (auth.error) return auth.error
+
+	const tenantId = c.req.param("tenantId")
+	const [subscription, limits, usage, transactions] = await Promise.all([
+		getTenantSubscription(c.env.DB, tenantId),
+		resolveQuotaLimits(c.env.DB, tenantId),
+		getTenantUsage(c.env.DB, tenantId),
+		getTenantTransactions(c.env.DB, tenantId, 30),
+	])
+
+	return ok(c, { subscription: subscription || null, limits, usage, transactions })
+})
+
+app.post("/tenants/:tenantId/commercial/change-plan", async (c) => {
+	const auth = await requireSuperAdmin(c)
+	if (auth.error) return auth.error
+
+	const tenantId = c.req.param("tenantId")
+	const { planCode, billingCycle } = await c.req.json()
+	if (!planCode) return fail(c, 4001, "缺少 planCode", 400)
+	const cycle = billingCycle === "yearly" ? "yearly" : "monthly"
+
+	const db = c.env.DB
+	const plan = await db
+		.prepare("SELECT id, code, price_monthly_cents, price_yearly_cents FROM plans WHERE code = ? AND status = ?")
+		.bind(planCode, "active")
+		.first()
+	if (!plan) return fail(c, 4004, "套餐不存在", 404)
+
+	const sub = await getTenantSubscription(db, tenantId)
+	if (!sub) return fail(c, 4004, "订阅不存在", 404)
+
+	const now = new Date().toISOString()
+	const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+	await db.batch([
+		db
+			.prepare(
+				"UPDATE tenant_subscriptions SET plan_id = ?, billing_cycle = ?, status = ?, current_period_start = ?, current_period_end = ?, updated_at = ? WHERE tenant_id = ?",
+			)
+			.bind(plan.id, cycle, "active", now, periodEnd, now, tenantId),
+		db
+			.prepare(
+				"INSERT INTO billing_transactions (id, tenant_id, subscription_id, event_type, amount_cents, currency, provider, provider_txn_id, status, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			)
+			.bind(
+				crypto.randomUUID(),
+				tenantId,
+				sub.id,
+				"subscription.plan_changed_by_super_admin",
+				Number(cycle === "yearly" ? plan.price_yearly_cents : plan.price_monthly_cents),
+				"CNY",
+				"manual",
+				null,
+				"succeeded",
+				JSON.stringify({ planCode, billingCycle: cycle }),
+				now,
+			),
+	])
+
+	return ok(c, { tenantId, planCode, billingCycle: cycle, status: "active" })
+})
+
+app.post("/tenants/:tenantId/commercial/override", async (c) => {
+	const auth = await requireSuperAdmin(c)
+	if (auth.error) return auth.error
+
+	const tenantId = c.req.param("tenantId")
+	const body = await c.req.json()
+	const now = new Date().toISOString()
+
+	await c.env.DB
+		.prepare(
+			`INSERT INTO tenant_quota_overrides (
+         id, tenant_id, extra_members, extra_assets, extra_pages,
+         extra_storage_bytes, extra_monthly_upload_bytes, reason, created_by, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		)
+		.bind(
+			crypto.randomUUID(),
+			tenantId,
+			Number(body.extraMembers || 0),
+			Number(body.extraAssets || 0),
+			Number(body.extraPages || 0),
+			Number(body.extraStorageBytes || 0),
+			Number(body.extraMonthlyUploadBytes || 0),
+			body.reason ? String(body.reason) : "platform_manual_override",
+			auth.user?.userId || "super_admin",
+			now,
+		)
+		.run()
+
+	return ok(c, { applied: true })
 })
 
 export default app

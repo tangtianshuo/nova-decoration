@@ -158,7 +158,10 @@ app.post("/register", async (c) => {
 	const tenantId = generateId()
 	const companyId = generateId()
 	const userId = generateId()
+	const subscriptionId = `sub-${tenantId}`
 	const now = new Date().toISOString()
+	const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+	const periodEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 	const hash = await hashPassword(password, c.env.PASSWORD_PEPPER ?? "")
 
 	await db.batch([
@@ -189,6 +192,23 @@ app.post("/register", async (c) => {
 				"INSERT INTO users (id, tenant_id, email, password_hash, role, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			)
 			.bind(userId, tenantId, email, hash, "tenant_admin", "active", now, now),
+		db
+			.prepare(
+				"INSERT OR IGNORE INTO tenant_subscriptions (id, tenant_id, plan_id, status, billing_cycle, trial_ends_at, current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			)
+			.bind(
+				subscriptionId,
+				tenantId,
+				"plan-free",
+				"trialing",
+				"monthly",
+				trialEndsAt,
+				now,
+				periodEndsAt,
+				0,
+				now,
+				now,
+			),
 	])
 
 	const token = await signJWT(

@@ -62,18 +62,18 @@ export default function Dashboard() {
               {isSuperAdmin ? '租户管理' : '创建新展示页'}
             </Link>
             <Link
-              to={isSuperAdmin ? '/platform/tenants' : '/assets/upload'}
+              to={isSuperAdmin ? '/platform/commercial' : '/billing'}
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
             >
               <Image className="w-5 h-5 text-green-500" />
-              {isSuperAdmin ? '查看租户列表' : '上传素材'}
+              {isSuperAdmin ? '查看商业运营指标' : '管理订阅与套餐'}
             </Link>
             <Link
-              to={isSuperAdmin ? '/platform/tenants' : '/pages'}
+              to={isSuperAdmin ? '/platform/tenants' : '/quotas'}
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-sm text-gray-700"
             >
               <QrCode className="w-5 h-5 text-purple-500" />
-              {isSuperAdmin ? '租户详情查询' : '管理分享链接'}
+              {isSuperAdmin ? '租户详情查询' : '查看配额与用量'}
             </Link>
           </div>
         </div>

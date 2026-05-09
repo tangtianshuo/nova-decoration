@@ -1,5 +1,12 @@
 import { Hono } from "hono"
 import { getAuthUser } from "../lib/auth"
+import {
+	addMonthlyUploadBytes,
+	assertTenantWritable,
+	getTenantUsage,
+	resolveQuotaLimits,
+} from "../lib/commercial"
+import { requireRole, requireTenantScope } from "../lib/rbac"
 import { fail, ok } from "../lib/response"
 
 type Bindings = {
@@ -147,7 +154,11 @@ function mapAssetRow(asset: any) {
 	}
 }
 
-async function findAssetUsagePageTitles(c: any, assetId: string, tenantId: string) {
+async function findAssetUsagePageTitles(
+	c: any,
+	assetId: string,
+	tenantId: string,
+) {
 	const db = c.env.DB
 	const usage = await db
 		.prepare(
@@ -164,17 +175,29 @@ async function findAssetUsagePageTitles(c: any, assetId: string, tenantId: strin
 		)
 		.bind(tenantId, tenantId, assetId, assetId, `%${assetId}%`)
 		.all()
-	return (usage.results || []).map((row: any) => String(row.title || "未命名展示页"))
+	return (usage.results || []).map((row: any) =>
+		String(row.title || "未命名展示页"),
+	)
 }
 
 app.post("/sign", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const { assetType, fileName, contentType, sizeBytes } = await c.req.json()
 	if (!assetType || !fileName) {
 		return fail(c, 4001, "参数错误", 400)
+	}
+	const targetSize = Number(sizeBytes || 0)
+	if (!Number.isFinite(targetSize) || targetSize <= 0) {
+		return fail(c, 4001, "文件大小无效", 400)
 	}
 
 	const allowedTypes =
@@ -184,8 +207,22 @@ app.post("/sign", async (c) => {
 	if (!allowedTypes.includes(contentType)) {
 		return fail(c, 4001, `不支持的文件类型: ${contentType}`, 400)
 	}
-	if (sizeBytes > maxSize) {
+	if (targetSize > maxSize) {
 		return fail(c, 4001, `文件大小超过限制 (${maxSize / 1024 / 1024}MB)`, 400)
+	}
+
+	const [limits, usage] = await Promise.all([
+		resolveQuotaLimits(c.env.DB, user.tenantId as string),
+		getTenantUsage(c.env.DB, user.tenantId as string),
+	])
+	if (usage.assets + 1 > limits.maxAssets) {
+		return fail(c, 4021, "素材数量已达套餐上限，请扩容", 402)
+	}
+	if (usage.storageBytes + targetSize > limits.maxStorageBytes) {
+		return fail(c, 4022, "存储空间不足，请扩容后再上传", 402)
+	}
+	if (usage.monthlyUploadedBytes + targetSize > limits.maxMonthlyUploadBytes) {
+		return fail(c, 4023, "本月上传额度已用尽，请升级套餐", 402)
 	}
 
 	const ext =
@@ -204,7 +241,13 @@ app.post("/sign", async (c) => {
 app.put("/direct/:key{.+}", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const objectKey = c.req.param("key")
 	if (!objectKey.startsWith(`tenant/${user.tenantId}/`)) {
@@ -241,7 +284,13 @@ app.put("/direct/:key{.+}", async (c) => {
 app.post("/complete", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const { objectKey, assetType, title } = await c.req.json()
 	if (!objectKey || !assetType) {
@@ -279,6 +328,13 @@ app.post("/complete", async (c) => {
 
 	const id = generateId()
 	const objectSize = Number(object.size || 0)
+	const [limits, usage] = await Promise.all([
+		resolveQuotaLimits(db, user.tenantId as string),
+		getTenantUsage(db, user.tenantId as string),
+	])
+	if (usage.storageBytes + objectSize > limits.maxStorageBytes) {
+		return fail(c, 4022, "存储空间不足，请扩容后再上传", 402)
+	}
 	const safeTitle = title || objectKey.split("/").pop() || "未命名素材"
 
 	await db
@@ -302,6 +358,8 @@ app.post("/complete", async (c) => {
 		)
 		.run()
 
+	await addMonthlyUploadBytes(db, user.tenantId as string, objectSize)
+
 	const asset = await db
 		.prepare("SELECT * FROM assets WHERE id = ?")
 		.bind(id)
@@ -313,7 +371,13 @@ app.post("/complete", async (c) => {
 app.post("/bilibili", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const { url, title } = await c.req.json()
 	if (!url) return fail(c, 4001, "请输入Bilibili链接", 400)
@@ -374,7 +438,13 @@ app.get("/", async (c) => {
 app.delete("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -416,7 +486,13 @@ app.delete("/:id", async (c) => {
 app.post("/:id/replace", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -463,7 +539,14 @@ app.post("/:id/replace", async (c) => {
 			.prepare(
 				"UPDATE assets SET url = ?, title = ?, size_bytes = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
 			)
-			.bind(nextUrl, nextTitle, Number(object.size || 0), now, id, user.tenantId)
+			.bind(
+				nextUrl,
+				nextTitle,
+				Number(object.size || 0),
+				now,
+				id,
+				user.tenantId,
+			)
 			.run()
 	} else if (asset.source_type === "bilibili") {
 		const url = String(body.url || "")

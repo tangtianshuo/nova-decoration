@@ -1,5 +1,7 @@
 import { Hono } from "hono"
 import { getAuthUser } from "../lib/auth"
+import { assertTenantWritable } from "../lib/commercial"
+import { requireRole, requireTenantScope } from "../lib/rbac"
 import { fail, ok } from "../lib/response"
 
 type Bindings = {
@@ -43,7 +45,13 @@ function mapShareLinkRow(link: any, qrcodeBaseUrl?: string) {
 app.post("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const { pageId, expireAt, fallbackUrl } = await c.req.json()
 	if (!pageId) return fail(c, 4001, "请指定页面", 400)
@@ -149,7 +157,13 @@ app.get("/:id", async (c) => {
 app.put("/:id/disable", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -172,7 +186,13 @@ app.put("/:id/disable", async (c) => {
 app.put("/:id/enable", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB

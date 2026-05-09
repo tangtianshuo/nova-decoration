@@ -1,5 +1,7 @@
 import { Hono } from "hono"
 import { getAuthUser } from "../lib/auth"
+import { assertTenantWritable } from "../lib/commercial"
+import { requireRole, requireTenantScope } from "../lib/rbac"
 import { fail, ok } from "../lib/response"
 
 type Bindings = {
@@ -12,7 +14,8 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get("/me", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
 
 	const db = c.env.DB
 	const company = await db
@@ -40,7 +43,13 @@ app.get("/me", async (c) => {
 app.put("/me", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const body = await c.req.json()
 	const { name, intro, contactPhone, contactWechat, contactAddress } = body

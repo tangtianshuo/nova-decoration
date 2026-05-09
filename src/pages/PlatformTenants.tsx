@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { useAuthStore } from "@/store/auth"
@@ -220,6 +221,12 @@ export default function PlatformTenants() {
 			<div>
 				<h1 className="text-2xl font-bold text-gray-900">租户管理</h1>
 				<p className="text-gray-500 mt-1">新增租户并初始化租户管理员账号；支持租户基础信息查询（只读）。</p>
+				<Link
+					to="/platform/commercial"
+					className="inline-flex mt-2 text-sm text-indigo-600 hover:text-indigo-700"
+				>
+					前往商业运营（套餐/配额/MRR）
+				</Link>
 			</div>
 
 			<div className="grid grid-cols-1 xl:grid-cols-3 gap-6">

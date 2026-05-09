@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, Image, FileText, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, Building2, Image, FileText, LogOut, Menu, Wallet, Gauge } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useState } from 'react';
 
@@ -8,6 +8,8 @@ const defaultNavItems = [
   { path: '/company/profile', label: '公司资料', icon: Building2 },
   { path: '/assets', label: '素材管理', icon: Image },
   { path: '/pages', label: '展示页管理', icon: FileText },
+  { path: '/billing', label: '计费中心', icon: Wallet },
+  { path: '/quotas', label: '配额中心', icon: Gauge },
 ];
 
 export default function AdminLayout() {
@@ -19,6 +21,7 @@ export default function AdminLayout() {
     ? [
         { path: '/dashboard', label: '概览', icon: LayoutDashboard },
         { path: '/platform/tenants', label: '租户管理', icon: Building2 },
+        { path: '/platform/commercial', label: '商业运营', icon: Wallet },
       ]
     : defaultNavItems;
 

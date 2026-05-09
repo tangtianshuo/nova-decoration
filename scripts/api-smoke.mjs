@@ -58,6 +58,40 @@ r = await callApi("GET", "/api/platform/tenants", null, tenantToken);
 const denied = r.status === 403 || r.body?.code === 4003;
 addResult("tenant_admin 访问平台接口拦截", denied, `status=${r.status}`);
 
+r = await callApi("GET", "/api/ops/metrics/overview", null, tenantToken);
+const opsDenied = r.status === 403 || r.body?.code === 4003;
+addResult("tenant_admin 访问运营指标拦截", opsDenied, `status=${r.status}`);
+
+r = await callApi("GET", "/api/quotas/me", null, tenantToken);
+const quotaOk =
+  r.body?.code === 0 &&
+  typeof r.body?.data?.limits?.maxStorageBytes === "number" &&
+  typeof r.body?.data?.usage?.storageBytes === "number";
+addResult("租户配额查询", quotaOk, `status=${r.status}`);
+
+r = await callApi("GET", "/api/billing/plans");
+const plansOk = r.body?.code === 0 && Array.isArray(r.body?.data) && r.body.data.length > 0;
+addResult("套餐列表查询", plansOk, `status=${r.status}`);
+
+r = await callApi("GET", "/api/billing/subscription/me", null, tenantToken);
+const subOk =
+  r.body?.code === 0 &&
+  typeof r.body?.data?.status === "string" &&
+  typeof r.body?.data?.planCode === "string";
+addResult("租户订阅查询", subOk, `status=${r.status}`);
+
+if (subOk) {
+  const nextPlanCode = r.body?.data?.planCode === "pro" ? "free" : "pro";
+  const c = await callApi(
+    "POST",
+    "/api/billing/subscription/change-plan",
+    { planCode: nextPlanCode, billingCycle: "monthly" },
+    tenantToken,
+  );
+  const changeOk = c.body?.code === 0 && c.body?.data?.planCode === nextPlanCode;
+  addResult("租户套餐变更", changeOk, `status=${c.status}`);
+}
+
 const uniq = Date.now();
 const newTenantName = `冒烟租户_${uniq}`;
 const newAdminEmail = `smoke_${uniq}@nova.local`;
@@ -94,6 +128,11 @@ addResult("super_admin 租户分页搜索", searchOk, `status=${r.status}`);
 r = await callApi("GET", `/api/platform/tenants/${newTenantId}`, null, superToken);
 const detailOk = r.body?.code === 0 && r.body?.data?.tenant?.id === newTenantId;
 addResult("super_admin 租户详情查看", detailOk, `status=${r.status}`);
+
+r = await callApi("GET", `/api/platform/tenants/${newTenantId}/commercial`, null, superToken);
+const commercialOk =
+  r.body?.code === 0 && typeof r.body?.data?.limits?.maxStorageBytes === "number";
+addResult("super_admin 租户商业信息查看", commercialOk, `status=${r.status}`);
 
 const newUserEmail = `viewer_${uniq}@nova.local`;
 const newUserPwd = "viewer123";

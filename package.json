@@ -11,15 +11,15 @@
 		"e2e:headed": "playwright test --headed",
 		"e2e:ui": "playwright test --ui",
 		"e2e:install": "playwright install --with-deps chromium",
-		"db:init": "wrangler d1 execute nova-dev --local --file=migrations/0001_init.sql",
-		"db:clear": "wrangler d1 execute nova-dev --local --command \"DELETE FROM events; DELETE FROM share_links; DELETE FROM page_blocks; DELETE FROM pages; DELETE FROM assets; DELETE FROM users; DELETE FROM companies; DELETE FROM tenants;\"",
+		"db:init": "wrangler d1 execute nova-dev --local --file=migrations/0001_init.sql && wrangler d1 execute nova-dev --local --file=migrations/0002_commercial_core.sql",
+		"db:clear": "wrangler d1 execute nova-dev --local --command \"DELETE FROM release_audits; DELETE FROM usage_monthly_snapshots; DELETE FROM tenant_quota_overrides; DELETE FROM billing_transactions; DELETE FROM tenant_subscriptions; DELETE FROM plans; DELETE FROM events; DELETE FROM share_links; DELETE FROM page_blocks; DELETE FROM pages; DELETE FROM assets; DELETE FROM users; DELETE FROM companies; DELETE FROM tenants;\"",
 		"db:seed": "wrangler d1 execute nova-dev --local --file=migrations/seed.sql",
-		"db:reset": "pnpm run db:init && pnpm run db:clear && pnpm run db:seed",
+		"db:reset": "pnpm run db:init && pnpm run db:seed",
 		"build": "tsc -b && vite build",
 		"lint": "eslint .",
 		"preview": "vite preview",
 		"check": "tsc -b --noEmit",
-		"test": "vitest run"
+		"test": "vitest run tests"
 	},
 	"dependencies": {
 		"clsx": "^2.1.1",

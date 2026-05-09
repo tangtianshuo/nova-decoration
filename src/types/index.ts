@@ -125,3 +125,74 @@ export interface UploadSignResponse {
 	headers: Record<string, string>
 	expireAt: string
 }
+
+export interface BillingPlan {
+	id: string
+	code: string
+	name: string
+	priceMonthlyCents: number
+	priceYearlyCents: number
+	maxMembers: number
+	maxAssets: number
+	maxPages: number
+	maxStorageBytes: number
+	maxMonthlyUploadBytes: number
+	status: string
+}
+
+export interface TenantSubscription {
+	id: string
+	tenantId: string
+	planId: string
+	planCode: string
+	planName: string
+	status: string
+	billingCycle: "monthly" | "yearly"
+	trialEndsAt: string | null
+	currentPeriodStart: string | null
+	currentPeriodEnd: string | null
+	priceMonthlyCents: number
+	priceYearlyCents: number
+}
+
+export interface QuotaInfo {
+	subscription: {
+		id: string
+		status: string
+		planCode: string
+		planName: string
+	} | null
+	limits: {
+		maxMembers: number
+		maxAssets: number
+		maxPages: number
+		maxStorageBytes: number
+		maxMonthlyUploadBytes: number
+	}
+	usage: {
+		members: number
+		assets: number
+		pages: number
+		storageBytes: number
+		monthlyUploadedBytes: number
+		month: string
+	}
+	remaining: {
+		members: number
+		assets: number
+		pages: number
+		storageBytes: number
+		monthlyUploadBytes: number
+	}
+}
+
+export interface BillingTransaction {
+	id: string
+	event_type: string
+	amount_cents: number
+	currency: string
+	provider: string
+	provider_txn_id: string | null
+	status: string
+	created_at: string
+}

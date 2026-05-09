@@ -15,6 +15,9 @@ import PageShare from '@/pages/PageShare';
 import Showcase from '@/pages/Showcase';
 import Fallback from '@/pages/Fallback';
 import PlatformTenants from '@/pages/PlatformTenants';
+import BillingCenter from '@/pages/BillingCenter';
+import QuotaCenter from '@/pages/QuotaCenter';
+import PlatformCommercial from '@/pages/PlatformCommercial';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { useAppStore } from '@/store/app';
@@ -115,10 +118,13 @@ export default function App() {
           <Route path="assets" element={<Assets />} />
           <Route path="assets/upload" element={<AssetUpload />} />
           <Route path="pages" element={<Pages />} />
+          <Route path="billing" element={<BillingCenter />} />
+          <Route path="quotas" element={<QuotaCenter />} />
           <Route path="pages/new" element={<PageEditor />} />
           <Route path="pages/:id/edit" element={<PageEdit />} />
           <Route path="pages/:id/share" element={<PageShare />} />
           <Route path="platform/tenants" element={<PlatformTenants />} />
+          <Route path="platform/commercial" element={<PlatformCommercial />} />
         </Route>
 
         <Route path="/s/:pageId" element={<Showcase />} />

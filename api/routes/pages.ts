@@ -1,5 +1,11 @@
 import { Hono } from "hono"
 import { getAuthUser } from "../lib/auth"
+import {
+	assertTenantWritable,
+	getTenantUsage,
+	resolveQuotaLimits,
+} from "../lib/commercial"
+import { requireRole, requireTenantScope } from "../lib/rbac"
 import { fail, ok } from "../lib/response"
 
 type Bindings = {
@@ -101,12 +107,25 @@ app.get("/", async (c) => {
 app.post("/", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const { title, summary, publishStatus, blocks } = await c.req.json()
 	if (!title) return fail(c, 4001, "请输入页面标题", 400)
 
 	const db = c.env.DB
+	const [limits, usage] = await Promise.all([
+		resolveQuotaLimits(db, user.tenantId as string),
+		getTenantUsage(db, user.tenantId as string),
+	])
+	if (usage.pages + 1 > limits.maxPages) {
+		return fail(c, 4024, "页面数量已达套餐上限，请扩容", 402)
+	}
 	const id = generateId()
 	const slug = generateSlug(title)
 	const now = new Date().toISOString()
@@ -190,7 +209,13 @@ app.get("/:id", async (c) => {
 app.put("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -250,7 +275,13 @@ app.put("/:id", async (c) => {
 app.post("/:id/publish", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -279,7 +310,13 @@ app.post("/:id/publish", async (c) => {
 app.post("/:id/offline", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB
@@ -306,7 +343,13 @@ app.post("/:id/offline", async (c) => {
 app.delete("/:id", async (c) => {
 	const user = await getAuthUser(c)
 	if (!user) return fail(c, 4003, "未登录", 401)
-	if (!user.tenantId) return fail(c, 4003, "无租户权限", 403)
+	const tenantError = requireTenantScope(c, user)
+	if (tenantError) return tenantError
+	const roleError = requireRole(c, user, ["tenant_admin", "tenant_editor"])
+	if (roleError) return roleError
+	const writable = await assertTenantWritable(c.env.DB, user.tenantId as string)
+	if (!writable.canWrite)
+		return fail(c, 4025, writable.reason || "租户不可写", 402)
 
 	const id = c.req.param("id")
 	const db = c.env.DB

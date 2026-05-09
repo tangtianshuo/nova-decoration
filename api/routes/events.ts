@@ -9,12 +9,21 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.post("/", async (c) => {
+	const authUser = await getAuthUser(c)
 	const { eventType, pageId, shareLinkId, eventData } = await c.req.json()
 	if (!eventType) return fail(c, 4001, "缺少事件类型", 400)
 
 	const db = c.env.DB
 	const id = crypto.randomUUID()
 	const now = new Date().toISOString()
+	let tenantId: string | null = authUser?.tenantId || null
+	if (!tenantId && shareLinkId) {
+		const link = await db
+			.prepare("SELECT tenant_id FROM share_links WHERE id = ? LIMIT 1")
+			.bind(shareLinkId)
+			.first()
+		tenantId = (link?.tenant_id as string) || null
+	}
 
 	await db
 		.prepare(
@@ -22,7 +31,7 @@ app.post("/", async (c) => {
 		)
 		.bind(
 			id,
-			null,
+			tenantId,
 			pageId || null,
 			shareLinkId || null,
 			eventType,

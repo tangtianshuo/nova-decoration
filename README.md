@@ -43,6 +43,8 @@ pnpm run dev
 
 ```bash
 pnpm run check
+pnpm run lint
+pnpm run test
 pnpm run build
 ```
 
@@ -76,3 +78,17 @@ pnpm run e2e:ui
 - `wrangler.toml` 默认是本地开发配置。
 - `env.staging` 和 `env.production` 仅保存非敏感变量。
 - `JWT_SECRET` 等敏感配置请放入 Worker secrets（或 `.dev.vars`）。
+- 计费回调验签密钥 `BILLING_WEBHOOK_SECRET` 请放入 Worker secrets（或 `.dev.vars`）。
+
+## 商业化能力验证
+
+执行 API 冒烟（需本地 API 服务已启动）：
+
+```bash
+node scripts/api-smoke.mjs
+```
+
+该脚本会覆盖：
+- 平台租户管理与跨租户权限拦截
+- 租户订阅查询与套餐变更
+- 配额查询与基础用量读取
